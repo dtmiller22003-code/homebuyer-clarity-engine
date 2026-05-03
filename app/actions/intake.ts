@@ -33,6 +33,10 @@ import {
   teamMembers,
 } from "@/db/schema";
 import { evaluateLead } from "@/lib/decision-engine";
+import {
+  COMPANY_DEFAULT_APPLICATION_URL,
+  resolveApplicationRedirectUrl,
+} from "@/lib/default-application-url";
 import { leadInputsToRow } from "@/lib/row-mapper";
 import type {
   LeadDecision,
@@ -82,6 +86,7 @@ function mockPublicResult(leadId: string): PublicResult {
       email: "support@example.com",
       phone: null,
     },
+    primaryApplicationUrl: COMPANY_DEFAULT_APPLICATION_URL,
   };
 }
 
@@ -218,6 +223,7 @@ export async function submitIntake(
 
     // 3b. Resolve realtor partner (optional) — ties the lead to a partner record when valid.
     let resolvedRealtorPartnerId: string | null = null;
+    let resolvedRealtorSlug: string | null = null;
     if (data.realtorPartnerSlug) {
       const slug = data.realtorPartnerSlug.trim().toLowerCase();
       const [partner] = await db
@@ -233,28 +239,44 @@ export async function submitIntake(
         .limit(1);
       if (partner) {
         resolvedRealtorPartnerId = partner.id;
+        resolvedRealtorSlug = partner.slug;
       }
     }
 
     // 4. Resolve assignee
     // Priority: (a) referrerLoSlug if valid, (b) org.defaultAssigneeId, (c) fallback string.
     let assignedToName = "Unassigned";
+    let intakeReferrer: (typeof teamMembers.$inferSelect) | null = null;
 
     if (data.referrerLoSlug) {
+      const loSlug = data.referrerLoSlug.trim().toLowerCase();
       const [referrer] = await db
         .select()
         .from(teamMembers)
         .where(
           and(
             eq(teamMembers.organizationId, org.id),
-            eq(teamMembers.slug, data.referrerLoSlug),
+            eq(teamMembers.slug, loSlug),
           ),
         )
         .limit(1);
 
       if (referrer) {
+        intakeReferrer = referrer;
         assignedToName = referrer.displayName;
       }
+    }
+
+    let sourceType: "company" | "realtor" | "loan_officer" = "company";
+    let sourceSlug: string | null = null;
+    let sourceTeamMemberId: string | null = null;
+    if (resolvedRealtorPartnerId && resolvedRealtorSlug) {
+      sourceType = "realtor";
+      sourceSlug = resolvedRealtorSlug;
+    } else if (intakeReferrer?.slug) {
+      sourceType = "loan_officer";
+      sourceSlug = intakeReferrer.slug;
+      sourceTeamMemberId = intakeReferrer.id;
     }
 
     if (assignedToName === "Unassigned" && org.defaultAssigneeId) {
@@ -299,6 +321,9 @@ export async function submitIntake(
         ...insertRow,
         referrerLoSlug: data.referrerLoSlug ?? null,
         realtorPartnerId: resolvedRealtorPartnerId,
+        sourceType,
+        sourceSlug,
+        sourceTeamMemberId,
       })
       .returning();
 
@@ -317,6 +342,9 @@ export async function submitIntake(
         referrerLoSlug: data.referrerLoSlug ?? null,
         realtorPartnerSlug: data.realtorPartnerSlug ?? null,
         leadSource: data.leadSource,
+        sourceType,
+        sourceSlug,
+        sourceTeamMemberId,
       },
     });
 
@@ -364,6 +392,9 @@ export interface PublicResult {
     email: string;
     phone: string | null;
   };
+
+  /** Full mortgage application URL (LO-specific or company default). */
+  primaryApplicationUrl: string;
 }
 
 // -----------------------------------------------------------------------------
@@ -498,6 +529,31 @@ export async function getPublicResult(
       phone: org.companyPhone,
     };
 
+    let applicationLink: string | null = null;
+    if (row.sourceTeamMemberId) {
+      const [m] = await db
+        .select({ applicationLink: teamMembers.applicationLink })
+        .from(teamMembers)
+        .where(eq(teamMembers.id, row.sourceTeamMemberId))
+        .limit(1);
+      applicationLink = m?.applicationLink ?? null;
+    } else if (row.referrerLoSlug) {
+      const loSlug = row.referrerLoSlug.trim().toLowerCase();
+      const [m] = await db
+        .select({ applicationLink: teamMembers.applicationLink })
+        .from(teamMembers)
+        .where(
+          and(
+            eq(teamMembers.organizationId, org.id),
+            eq(teamMembers.slug, loSlug),
+          ),
+        )
+        .limit(1);
+      applicationLink = m?.applicationLink ?? null;
+    }
+    const primaryApplicationUrl =
+      resolveApplicationRedirectUrl(applicationLink);
+
     return {
       firstName: row.firstName,
       readiness: decision.readiness,
@@ -510,6 +566,7 @@ export async function getPublicResult(
       topRecommendation: pickTopRecommendation(decision),
       buyerExplanation: buyerify(decision.explanation),
       contact,
+      primaryApplicationUrl,
     };
   } catch (err) {
     if (!isDbUnavailableError(err)) {

@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db/client";
 import { leads, realtorPartners } from "@/db/schema";
-import { isAdminRole } from "@/lib/auth-roles";
+import { normalizeExternalApplicationUrl } from "@/lib/default-application-url";
+import { isAdminRole, isRealtorPartnerRole } from "@/lib/auth-roles";
 import { getAuthContext } from "@/lib/supabase/auth";
 
 function slugify(raw: string): string {
@@ -33,6 +34,9 @@ export type RealtorPartnerAdminRow = {
   slug: string;
   brokerage: string | null;
   leadCount: number;
+  personalLogoUrl: string | null;
+  subtitle: string | null;
+  defaultApplicationLink: string | null;
 };
 
 export async function listRealtorPartnersAdmin(): Promise<
@@ -60,6 +64,9 @@ export async function listRealtorPartnersAdmin(): Promise<
       slug: p.slug,
       brokerage: p.brokerage,
       leadCount: Number(n),
+      personalLogoUrl: p.personalLogoUrl,
+      subtitle: p.subtitle,
+      defaultApplicationLink: p.defaultApplicationLink,
     });
   }
   out.sort((a, b) => a.displayName.localeCompare(b.displayName));
@@ -130,4 +137,99 @@ export async function createRealtorPartner(
   } catch {
     return { ok: false, error: "Could not create partner. Try a different slug." };
   }
+}
+
+const updateRealtorBrandingSchema = z.object({
+  partnerId: z.string().uuid(),
+  personalLogoUrl: z.string().max(2000).nullable(),
+  subtitle: z.string().max(500).nullable(),
+  defaultApplicationLink: z.string().max(2000).nullable(),
+});
+
+function validateHttpsUrlField(
+  label: string,
+  raw: string | null | undefined,
+): { ok: true; value: string | null } | { ok: false; error: string } {
+  if (raw === undefined || raw === null) return { ok: true, value: null };
+  const t = raw.trim();
+  if (t.length === 0) return { ok: true, value: null };
+  try {
+    const u = new URL(t);
+    if (u.protocol !== "https:") {
+      return { ok: false, error: `${label} must use https://` };
+    }
+    return { ok: true, value: t };
+  } catch {
+    return { ok: false, error: `${label} is not a valid URL` };
+  }
+}
+
+export async function updateRealtorPartnerBranding(
+  input: z.infer<typeof updateRealtorBrandingSchema>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const auth = await getAuthContext();
+  const parsed = updateRealtorBrandingSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "Invalid request." };
+  }
+
+  const canAdmin = isAdminRole(auth.role);
+  const canSelf =
+    isRealtorPartnerRole(auth.role) &&
+    auth.realtorPartnerId === parsed.data.partnerId;
+
+  if (!canAdmin && !canSelf) {
+    return { ok: false, error: "You do not have permission to update this partner." };
+  }
+
+  const [partner] = await db
+    .select()
+    .from(realtorPartners)
+    .where(
+      and(
+        eq(realtorPartners.id, parsed.data.partnerId),
+        eq(realtorPartners.organizationId, auth.organizationId),
+      ),
+    )
+    .limit(1);
+
+  if (!partner) {
+    return { ok: false, error: "Partner not found." };
+  }
+
+  const subtitleNorm =
+    parsed.data.subtitle === null || parsed.data.subtitle === ""
+      ? null
+      : parsed.data.subtitle.trim() || null;
+
+  const logoRes = validateHttpsUrlField(
+    "Logo URL",
+    parsed.data.personalLogoUrl,
+  );
+  if (!logoRes.ok) return logoRes;
+
+  const appRes = validateHttpsUrlField(
+    "Default application URL",
+    parsed.data.defaultApplicationLink,
+  );
+  if (!appRes.ok) return appRes;
+
+  const defaultAppNorm = appRes.value
+    ? normalizeExternalApplicationUrl(appRes.value)
+    : null;
+
+  await db
+    .update(realtorPartners)
+    .set({
+      personalLogoUrl: logoRes.value,
+      subtitle: subtitleNorm,
+      defaultApplicationLink: defaultAppNorm,
+    })
+    .where(eq(realtorPartners.id, partner.id));
+
+  revalidatePath("/settings/realtors");
+  revalidatePath("/realtor");
+  revalidatePath("/realtor/branding");
+  revalidatePath("/apply");
+  return { ok: true };
 }

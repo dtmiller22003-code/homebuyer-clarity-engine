@@ -10,9 +10,10 @@
 
 "use server";
 
-import { and, asc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { organizations, teamMembers } from "@/db/schema";
+import { teamMembers } from "@/db/schema";
+import { getPublicOrganizationRow } from "@/lib/public-organization";
 
 export interface PublicBrand {
   organizationId: string;
@@ -34,41 +35,6 @@ export interface PublicLoProfile {
   phone: string | null;
   bio: string | null;
   slug: string;
-}
-
-/** Set in env to the org UUID that owns public /apply (same row as /settings/branding). */
-function publicOrganizationIdFromEnv(): string | null {
-  const raw = process.env.PUBLIC_ORGANIZATION_ID?.trim();
-  if (!raw) return null;
-  if (
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)
-  ) {
-    return null;
-  }
-  return raw;
-}
-
-/**
- * The one organization that powers public intake + LO profiles for this deployment.
- * - Prefer PUBLIC_ORGANIZATION_ID (explicit, matches branding settings org).
- * - Else oldest row by created_at (deterministic; OK when only one org exists).
- */
-async function getPublicOrganizationRow() {
-  const explicitId = publicOrganizationIdFromEnv();
-  if (explicitId) {
-    const [org] = await db
-      .select()
-      .from(organizations)
-      .where(eq(organizations.id, explicitId))
-      .limit(1);
-    return org ?? null;
-  }
-  const [org] = await db
-    .select()
-    .from(organizations)
-    .orderBy(asc(organizations.createdAt))
-    .limit(1);
-  return org ?? null;
 }
 
 // -----------------------------------------------------------------------------

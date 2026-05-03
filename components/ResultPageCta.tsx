@@ -9,6 +9,8 @@ export interface ResultPageCtaProps {
   phone?: string;
   bookingUrl?: string;
   formUrl?: string;
+  /** Full mortgage application (LO-specific or company default). */
+  applicationUrl: string;
 }
 
 function phoneDigits(phone: string): string {
@@ -20,25 +22,33 @@ export function ResultPageCta({
   phone,
   bookingUrl,
   formUrl,
+  applicationUrl,
 }: ResultPageCtaProps) {
   const telHref = phone ? `tel:${phoneDigits(phone)}` : undefined;
   const smsHref = phone ? `sms:${phoneDigits(phone)}` : undefined;
 
   if (readiness === "READY_NOW") {
-    const primaryHref = bookingUrl ?? telHref;
     return (
       <div className="mt-8 rounded-lg border border-surface-200 bg-surface-50 p-4 sm:p-5">
         <p className="text-sm text-surface-700 leading-relaxed">
           When you are ready, a short conversation can help confirm next steps—no
           pressure, just clarity.
         </p>
-        {primaryHref ? (
-          <a
-            href={primaryHref}
-            className="mt-4 inline-flex rounded-md bg-[color:var(--brand-primary,#1e40af)] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
-          >
-            Book a call
-          </a>
+        <a
+          href={applicationUrl}
+          className="mt-4 inline-flex rounded-md bg-[color:var(--brand-primary,#1e40af)] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+        >
+          Continue to full application
+        </a>
+        {bookingUrl ? (
+          <div className="mt-3">
+            <a
+              href={bookingUrl}
+              className="text-sm text-[color:var(--brand-primary,#1e40af)] hover:underline"
+            >
+              Schedule a call
+            </a>
+          </div>
         ) : null}
         {telHref || smsHref ? (
           <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm">
@@ -65,23 +75,30 @@ export function ResultPageCta({
   }
 
   if (readiness === "NEARLY_READY") {
-    const primaryHref = bookingUrl ?? telHref;
     return (
       <div className="mt-8 rounded-lg border border-surface-200 bg-surface-50 p-4 sm:p-5">
         <p className="text-sm text-surface-700 leading-relaxed">
           You are close. A quick chat can help prioritize what matters most for
           your timeline.
         </p>
-        {primaryHref ? (
-          <a
-            href={primaryHref}
-            className="mt-4 inline-flex rounded-md bg-[color:var(--brand-primary,#1e40af)] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
-          >
-            Talk to a loan officer
-          </a>
+        <a
+          href={applicationUrl}
+          className="mt-4 inline-flex rounded-md bg-[color:var(--brand-primary,#1e40af)] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+        >
+          Continue to full application
+        </a>
+        {bookingUrl ? (
+          <div className="mt-3">
+            <a
+              href={bookingUrl}
+              className="text-sm text-[color:var(--brand-primary,#1e40af)] hover:underline"
+            >
+              Talk to a loan officer (schedule)
+            </a>
+          </div>
         ) : null}
         {formUrl ? (
-          <div className="mt-4">
+          <div className="mt-3">
             <a
               href={formUrl}
               className="text-sm text-[color:var(--brand-primary,#1e40af)] hover:underline"
@@ -101,16 +118,24 @@ export function ResultPageCta({
         Many buyers start here. If you would like a simple checklist tailored to
         your snapshot, we can follow up when you are ready.
       </p>
+      <a
+        href={applicationUrl}
+        className="mt-4 inline-flex rounded-md bg-[color:var(--brand-primary,#1e40af)] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+      >
+        Continue to full application
+      </a>
       {formUrl ? (
-        <a
-          href={formUrl}
-          className="mt-4 inline-flex rounded-md bg-[color:var(--brand-primary,#1e40af)] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
-        >
-          Get a personalized checklist
-        </a>
+        <div className="mt-3">
+          <a
+            href={formUrl}
+            className="text-sm text-[color:var(--brand-primary,#1e40af)] hover:underline"
+          >
+            Get a personalized checklist
+          </a>
+        </div>
       ) : null}
       {bookingUrl ? (
-        <div className="mt-4">
+        <div className="mt-3">
           <a
             href={bookingUrl}
             className="text-sm text-[color:var(--brand-primary,#1e40af)] hover:underline"

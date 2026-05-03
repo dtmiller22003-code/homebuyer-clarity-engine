@@ -60,6 +60,9 @@ export type LeadStatus =
   | "archived"
   | "sent_to_crm";
 
+/** How the lead was attributed at intake (public links vs company default). */
+export type LeadAttributionSource = "company" | "realtor" | "loan_officer";
+
 // =============================================================================
 // Lead — the raw inputs captured from a borrower.
 // =============================================================================
@@ -96,6 +99,11 @@ export interface LeadInputs {
 
   /** Present when the lead came in via a realtor partner link. */
   realtorPartnerId?: string | null;
+
+  sourceType?: LeadAttributionSource;
+  sourceSlug?: string | null;
+  /** Loan officer team member when source is loan_officer. */
+  sourceTeamMemberId?: string | null;
 }
 
 // =============================================================================
@@ -197,4 +205,13 @@ export const EMPLOYMENT_LABELS: Record<EmploymentType, string> = {
 export const OCCUPANCY_INTENT_LABELS: Record<OccupancyIntent, string> = {
   PRIMARY_HOME: "Primary Home",
   INVESTMENT_PROPERTY: "Investment Property",
+};
+
+export const LEAD_ATTRIBUTION_SOURCE_LABELS: Record<
+  LeadAttributionSource,
+  string
+> = {
+  company: "Company default",
+  realtor: "Realtor partner link",
+  loan_officer: "Loan officer link",
 };

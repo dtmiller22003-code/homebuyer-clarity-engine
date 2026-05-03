@@ -9,6 +9,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db/client";
+import { normalizeExternalApplicationUrl } from "@/lib/default-application-url";
 import { organizations, teamMembers } from "@/db/schema";
 import { getAuthContext } from "@/lib/supabase/auth";
 
@@ -64,6 +65,7 @@ const updateTeamMemberSchema = z.object({
   slug: z.string().nullable().optional(),
   bio: z.string().max(4000).nullable().optional(),
   role: z.enum(["admin", "agent", "loan_officer"]),
+  applicationLink: z.union([z.string().max(2000), z.null()]).optional(),
 });
 
 function normalizeSlug(raw: string | null | undefined): string | null {
@@ -173,6 +175,24 @@ export async function updateTeamMember(
     return { ok: false, error: slugErr };
   }
 
+  let applicationLinkResolved: string | null | undefined = undefined;
+  if (parsed.data.applicationLink !== undefined) {
+    const raw = parsed.data.applicationLink;
+    if (raw === null || raw === "") {
+      applicationLinkResolved = null;
+    } else {
+      const normalized = normalizeExternalApplicationUrl(raw.trim());
+      if (!normalized) {
+        return {
+          ok: false,
+          error:
+            "Application link must be a valid https URL (or leave blank for the company default).",
+        };
+      }
+      applicationLinkResolved = normalized;
+    }
+  }
+
   try {
     const phone =
       parsed.data.phone === undefined || parsed.data.phone === ""
@@ -183,15 +203,27 @@ export async function updateTeamMember(
         ? null
         : parsed.data.bio;
 
+    const updatePayload: {
+      displayName: string;
+      phone: string | null;
+      slug: string | null;
+      bio: string | null;
+      role: string;
+      applicationLink?: string | null;
+    } = {
+      displayName: parsed.data.displayName,
+      phone,
+      slug,
+      bio,
+      role: parsed.data.role,
+    };
+    if (applicationLinkResolved !== undefined) {
+      updatePayload.applicationLink = applicationLinkResolved;
+    }
+
     const [updated] = await db
       .update(teamMembers)
-      .set({
-        displayName: parsed.data.displayName,
-        phone,
-        slug,
-        bio,
-        role: parsed.data.role,
-      })
+      .set(updatePayload)
       .where(
         and(
           eq(teamMembers.id, parsed.data.memberId),
@@ -217,6 +249,7 @@ export async function updateTeamMember(
   revalidatePath("/settings/branding");
   revalidatePath("/settings/team");
   revalidatePath("/apply");
+  revalidatePath("/apply/lo");
   return { ok: true };
 }
 

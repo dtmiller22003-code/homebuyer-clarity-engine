@@ -30,6 +30,7 @@ export default async function TeamSettingsPage() {
       slug: teamMembers.slug,
       bio: teamMembers.bio,
       role: teamMembers.role,
+      applicationLink: teamMembers.applicationLink,
     })
     .from(teamMembers)
     .where(eq(teamMembers.organizationId, auth.organizationId));
@@ -41,6 +42,10 @@ export default async function TeamSettingsPage() {
         m.role === "agent" ||
         m.role === "loan_officer",
     )
+    .map((m) => ({
+      ...m,
+      applicationLink: m.applicationLink ?? null,
+    }))
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 
   if (normalizedMembers.length === 0) {

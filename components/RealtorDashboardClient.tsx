@@ -6,11 +6,17 @@ import { TopBar } from "@/components/TopBar";
 
 interface RealtorDashboardClientProps {
   leads: Lead[];
+  partnerBranding: {
+    displayName: string;
+    personalLogoUrl: string | null;
+    subtitle: string | null;
+  } | null;
   currentUser: { displayName: string; email: string; role: string };
 }
 
 export function RealtorDashboardClient({
   leads,
+  partnerBranding,
   currentUser,
 }: RealtorDashboardClientProps) {
   return (
@@ -18,9 +24,26 @@ export function RealtorDashboardClient({
       <TopBar user={currentUser} />
 
       <div className="p-6 max-w-4xl mx-auto w-full">
+        {partnerBranding?.personalLogoUrl || partnerBranding?.subtitle ? (
+          <div className="mb-6 rounded-lg border border-surface-200 bg-white p-4 flex flex-col sm:flex-row sm:items-center gap-4">
+            {partnerBranding.personalLogoUrl ? (
+              <img
+                src={partnerBranding.personalLogoUrl}
+                alt=""
+                className="h-12 w-auto max-w-[200px] object-contain shrink-0"
+              />
+            ) : null}
+            {partnerBranding.subtitle ? (
+              <p className="text-sm text-surface-700 leading-snug">
+                {partnerBranding.subtitle}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <h1 className="text-2xl font-semibold text-surface-900">Your leads</h1>
         <p className="text-sm text-surface-600 mt-1 mb-6">
-          Leads submitted through your personal link appear here.
+          Leads attributed to your partner account appear here. Share your public
+          apply link with buyers.
         </p>
 
         {leads.length === 0 ? (

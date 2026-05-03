@@ -51,6 +51,14 @@ export function TopBar({ user }: TopBarProps) {
         <Link href={homeHref} className="text-surface-300 hover:text-white">
           Home
         </Link>
+        {user.role === "realtor_partner" && (
+          <Link
+            href="/realtor/branding"
+            className="text-surface-300 hover:text-white"
+          >
+            Branding
+          </Link>
+        )}
         {isAdminRole(user.role) && (
           <>
             <Link

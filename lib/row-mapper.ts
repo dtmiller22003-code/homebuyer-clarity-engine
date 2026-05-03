@@ -3,7 +3,7 @@
 // Keeps the decision engine completely unaware of the DB.
 // =============================================================================
 
-import type { Lead, LeadInputs } from "./types";
+import type { Lead, LeadAttributionSource, LeadInputs } from "./types";
 import type { LeadRow, NewLeadRow } from "@/db/schema";
 import { evaluateLead } from "./decision-engine";
 
@@ -34,6 +34,9 @@ export function rowToLead(row: LeadRow): Lead {
     notes: row.notes ?? undefined,
     status: row.status,
     realtorPartnerId: row.realtorPartnerId ?? null,
+    sourceType: (row.sourceType as LeadAttributionSource | undefined) ?? "company",
+    sourceSlug: row.sourceSlug ?? null,
+    sourceTeamMemberId: row.sourceTeamMemberId ?? null,
   };
 
   return { ...inputs, decision: row.decision };

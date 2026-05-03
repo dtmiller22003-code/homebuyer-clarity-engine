@@ -213,6 +213,7 @@ export default async function PublicResultPage({
           phone={cta.phone}
           bookingUrl={cta.bookingUrl}
           formUrl={cta.formUrl}
+          applicationUrl={result.primaryApplicationUrl}
         />
 
         <div className="mt-6 text-xs sm:text-sm text-surface-600 leading-relaxed">

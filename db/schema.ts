@@ -12,7 +12,7 @@
 // PHASE 2B ADDITIONS:
 // - organizations: branding colors, logo URL, font preset, default assignee, contact
 // - team_members: slug (public routing), phone, bio, calendly_url (reserved)
-// - leads: referrer_lo_slug (attribution from /apply/[slug])
+// - leads: referrer_lo_slug, source_type / source_slug / source_team_member_id
 // - NEW: realtor_partners (schema only, no UI yet)
 // - NEW: rate_limits (IP-based intake throttling)
 // - NEW: lead_documents (lead file metadata + Supabase Storage pointer)
@@ -142,6 +142,11 @@ export const realtorPartners = pgTable(
     phone: text("phone"),
     slug: text("slug").notNull(),
     brokerage: text("brokerage"),
+    /** Realtor-only branding (URL text; no upload in product). */
+    personalLogoUrl: text("personal_logo_url"),
+    subtitle: text("subtitle"),
+    /** Optional override for /apply/realtor/[slug] redirect; else company default. */
+    defaultApplicationLink: text("default_application_link"),
     active: text("active").notNull().default("true"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -158,7 +163,7 @@ export const realtorPartners = pgTable(
 
 // -----------------------------------------------------------------------------
 // team_members
-// PHASE 2B: public profile fields (slug drives /apply/[slug] routing)
+// PHASE 2B: public profile fields (slug drives /apply/lo/[slug] routing)
 // -----------------------------------------------------------------------------
 export const teamMembers = pgTable(
   "team_members",
@@ -177,6 +182,8 @@ export const teamMembers = pgTable(
     phone: text("phone"),
     bio: text("bio"),
     calendlyUrl: text("calendly_url"), // reserved for Phase 3
+    /** External full-app URL for Book Now / /apply/lo/[slug] redirect. */
+    applicationLink: text("application_link"),
     /** When role is `realtor_partner`, scopes RLS and dashboard to this partner's leads. */
     realtorPartnerId: uuid("realtor_partner_id").references(
       () => realtorPartners.id,
@@ -196,6 +203,37 @@ export const teamMembers = pgTable(
     orgSlugIdx: uniqueIndex("team_members_org_slug_idx").on(
       table.organizationId,
       table.slug,
+    ),
+  }),
+);
+
+// -----------------------------------------------------------------------------
+// partner_apply_redirect_events — anonymous visits to public partner apply URLs
+// (recorded before redirect to external application).
+// -----------------------------------------------------------------------------
+export const partnerApplyRedirectEvents = pgTable(
+  "partner_apply_redirect_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    realtorPartnerId: uuid("realtor_partner_id").references(
+      () => realtorPartners.id,
+      { onDelete: "set null" },
+    ),
+    teamMemberId: uuid("team_member_id").references(() => teamMembers.id, {
+      onDelete: "set null",
+    }),
+    sourceSlug: text("source_slug").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    orgIdx: index("partner_apply_redirect_events_org_idx").on(
+      table.organizationId,
     ),
   }),
 );
@@ -228,6 +266,13 @@ export const leads = pgTable(
     /** Set when intake uses a realtor partner link (`/apply/realtor/[slug]` or `?partner=`). */
     realtorPartnerId: uuid("realtor_partner_id").references(
       () => realtorPartners.id,
+      { onDelete: "set null" },
+    ),
+    /** Intake attribution: company | realtor | loan_officer */
+    sourceType: text("source_type").notNull().default("company"),
+    sourceSlug: text("source_slug"),
+    sourceTeamMemberId: uuid("source_team_member_id").references(
+      () => teamMembers.id,
       { onDelete: "set null" },
     ),
 

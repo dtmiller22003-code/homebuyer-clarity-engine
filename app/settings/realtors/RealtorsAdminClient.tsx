@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   createRealtorPartner,
+  updateRealtorPartnerBranding,
   type RealtorPartnerAdminRow,
 } from "@/app/actions/realtors";
 
@@ -74,6 +75,36 @@ export function RealtorsAdminClient({
       showToast("success", "Realtor partner created.");
       router.refresh();
     });
+  };
+
+  const savePartnerBranding = (p: RealtorPartnerAdminRow) => {
+    startTransition(async () => {
+      const res = await updateRealtorPartnerBranding({
+        partnerId: p.id,
+        personalLogoUrl: p.personalLogoUrl?.trim() || null,
+        subtitle: p.subtitle?.trim() || null,
+        defaultApplicationLink: p.defaultApplicationLink?.trim() || null,
+      });
+      if (!res.ok) {
+        showToast("error", res.error);
+        return;
+      }
+      showToast("success", "Partner branding saved.");
+      router.refresh();
+    });
+  };
+
+  const setPartnerField = (
+    id: string,
+    field: keyof Pick<
+      RealtorPartnerAdminRow,
+      "personalLogoUrl" | "subtitle" | "defaultApplicationLink"
+    >,
+    value: string,
+  ) => {
+    setPartners((prev) =>
+      prev.map((x) => (x.id === id ? { ...x, [field]: value } : x)),
+    );
   };
 
   return (
@@ -157,8 +188,8 @@ export function RealtorsAdminClient({
         </h2>
         <ul className="space-y-3">
           {partners.map((p) => {
-            const pathLink = `${origin}/apply/realtor/${encodeURIComponent(p.slug)}`;
-            const queryLink = `${origin}/apply/short?partner=${encodeURIComponent(p.slug)}`;
+            const publicLeadLink = `${origin}/apply/realtor/${encodeURIComponent(p.slug)}`;
+            const privateDashboardLink = `${origin}/realtor`;
             return (
               <li
                 key={p.id}
@@ -170,19 +201,23 @@ export function RealtorsAdminClient({
                   {p.phone ? ` · ${p.phone}` : ""} · {p.leadCount} lead
                   {p.leadCount === 1 ? "" : "s"}
                 </div>
-                <div className="mt-3 space-y-1.5 text-xs">
+
+                <div className="mt-3 space-y-2 text-xs">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-surface-600 shrink-0">Path link:</span>
+                    <span className="text-surface-600 shrink-0 font-medium">
+                      Public lead link
+                    </span>
                     <code className="bg-surface-100 px-1.5 py-0.5 rounded break-all">
-                      {pathLink || `/apply/realtor/${p.slug}`}
+                      {publicLeadLink || `/apply/realtor/${p.slug}`}
                     </code>
                     <button
                       type="button"
                       className="text-brand font-medium"
                       onClick={() =>
                         copyText(
-                          "Path link",
-                          pathLink || `${typeof window !== "undefined" ? window.location.origin : ""}/apply/realtor/${p.slug}`,
+                          "Public lead link",
+                          publicLeadLink ||
+                            `${typeof window !== "undefined" ? window.location.origin : ""}/apply/realtor/${p.slug}`,
                         )
                       }
                     >
@@ -190,24 +225,73 @@ export function RealtorsAdminClient({
                     </button>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-surface-600 shrink-0">Query link:</span>
+                    <span className="text-surface-600 shrink-0 font-medium">
+                      Private dashboard (login)
+                    </span>
                     <code className="bg-surface-100 px-1.5 py-0.5 rounded break-all">
-                      {queryLink || `/apply/short?partner=${p.slug}`}
+                      {privateDashboardLink}
                     </code>
                     <button
                       type="button"
                       className="text-brand font-medium"
                       onClick={() =>
-                        copyText(
-                          "Query link",
-                          queryLink ||
-                            `${typeof window !== "undefined" ? window.location.origin : ""}/apply/short?partner=${p.slug}`,
-                        )
+                        copyText("Private dashboard link", privateDashboardLink)
                       }
                     >
                       Copy
                     </button>
                   </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-surface-100 space-y-2">
+                  <p className="text-xs font-semibold text-surface-800">
+                    Partner branding (optional)
+                  </p>
+                  <label className="block text-[11px] text-surface-600">
+                    Personal logo URL (https)
+                    <input
+                      value={p.personalLogoUrl ?? ""}
+                      onChange={(e) =>
+                        setPartnerField(p.id, "personalLogoUrl", e.target.value)
+                      }
+                      className="mt-0.5 w-full rounded border border-surface-300 px-2 py-1.5 text-xs"
+                      placeholder="https://…"
+                    />
+                  </label>
+                  <label className="block text-[11px] text-surface-600">
+                    Subtitle
+                    <input
+                      value={p.subtitle ?? ""}
+                      onChange={(e) =>
+                        setPartnerField(p.id, "subtitle", e.target.value)
+                      }
+                      className="mt-0.5 w-full rounded border border-surface-300 px-2 py-1.5 text-xs"
+                      placeholder="In partnership with …"
+                    />
+                  </label>
+                  <label className="block text-[11px] text-surface-600">
+                    Custom apply redirect (optional https)
+                    <input
+                      value={p.defaultApplicationLink ?? ""}
+                      onChange={(e) =>
+                        setPartnerField(
+                          p.id,
+                          "defaultApplicationLink",
+                          e.target.value,
+                        )
+                      }
+                      className="mt-0.5 w-full rounded border border-surface-300 px-2 py-1.5 text-xs"
+                      placeholder="Company default if blank"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => savePartnerBranding(p)}
+                    className="rounded-md border border-surface-300 bg-white px-3 py-1.5 text-xs font-medium text-surface-800 hover:bg-surface-50 disabled:opacity-50"
+                  >
+                    Save branding
+                  </button>
                 </div>
               </li>
             );
