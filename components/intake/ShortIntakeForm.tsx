@@ -26,6 +26,8 @@ import {
 export interface ShortIntakeFormProps {
   organizationId: string;
   referrerLoSlug?: string;
+  /** From `/apply/realtor/[slug]` or `?partner=` — stored on the lead when valid. */
+  realtorPartnerSlug?: string;
   brandColors: IntakeBrandColors;
 }
 
@@ -77,6 +79,7 @@ function mapEmploymentToIntake(
 export function ShortIntakeForm({
   organizationId,
   referrerLoSlug,
+  realtorPartnerSlug,
   brandColors,
 }: ShortIntakeFormProps) {
   const router = useRouter();
@@ -160,6 +163,7 @@ export function ShortIntakeForm({
     const payload: IntakeInput = {
       organizationId,
       referrerLoSlug: referrerLoSlug?.trim() || undefined,
+      realtorPartnerSlug: realtorPartnerSlug?.trim() || undefined,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       email: email.trim(),

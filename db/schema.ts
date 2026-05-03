@@ -127,6 +127,36 @@ export const organizations = pgTable("organizations", {
 });
 
 // -----------------------------------------------------------------------------
+// realtor_partners — referral partners; must appear before team_members / leads
+// (those tables reference this one).
+// -----------------------------------------------------------------------------
+export const realtorPartners = pgTable(
+  "realtor_partners",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    displayName: text("display_name").notNull(),
+    email: text("email").notNull(),
+    phone: text("phone"),
+    slug: text("slug").notNull(),
+    brokerage: text("brokerage"),
+    active: text("active").notNull().default("true"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    orgIdx: index("realtor_partners_org_idx").on(table.organizationId),
+    orgSlugIdx: uniqueIndex("realtor_partners_org_slug_idx").on(
+      table.organizationId,
+      table.slug,
+    ),
+  }),
+);
+
+// -----------------------------------------------------------------------------
 // team_members
 // PHASE 2B: public profile fields (slug drives /apply/[slug] routing)
 // -----------------------------------------------------------------------------
@@ -147,6 +177,11 @@ export const teamMembers = pgTable(
     phone: text("phone"),
     bio: text("bio"),
     calendlyUrl: text("calendly_url"), // reserved for Phase 3
+    /** When role is `realtor_partner`, scopes RLS and dashboard to this partner's leads. */
+    realtorPartnerId: uuid("realtor_partner_id").references(
+      () => realtorPartners.id,
+      { onDelete: "set null" },
+    ),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -154,6 +189,9 @@ export const teamMembers = pgTable(
   },
   (table) => ({
     orgIdx: index("team_members_org_idx").on(table.organizationId),
+    realtorPartnerIdx: index("team_members_realtor_partner_idx").on(
+      table.realtorPartnerId,
+    ),
     // One slug per org — prevents /apply/diana from routing two places
     orgSlugIdx: uniqueIndex("team_members_org_slug_idx").on(
       table.organizationId,
@@ -187,6 +225,11 @@ export const leads = pgTable(
 
     // Phase 2B — attribution
     referrerLoSlug: text("referrer_lo_slug"),
+    /** Set when intake uses a realtor partner link (`/apply/realtor/[slug]` or `?partner=`). */
+    realtorPartnerId: uuid("realtor_partner_id").references(
+      () => realtorPartners.id,
+      { onDelete: "set null" },
+    ),
 
     // Pillar inputs
     creditRange: creditRangeEnum("credit_range").notNull(),
@@ -221,6 +264,9 @@ export const leads = pgTable(
     orgIdx: index("leads_org_idx").on(table.organizationId),
     statusIdx: index("leads_status_idx").on(table.status),
     assignedIdx: index("leads_assigned_idx").on(table.assignedTo),
+    realtorPartnerIdx: index("leads_realtor_partner_idx").on(
+      table.realtorPartnerId,
+    ),
   }),
 );
 
@@ -278,38 +324,6 @@ export const leadEvents = pgTable(
   },
   (table) => ({
     leadIdx: index("lead_events_lead_idx").on(table.leadId),
-  }),
-);
-
-// -----------------------------------------------------------------------------
-// realtor_partners (PHASE 2B — schema only; UI deferred to Phase 3)
-// Note: actorUserId is NOT required on lead_events when written from the
-// public intake flow — we use a sentinel UUID. See app/actions/intake.ts.
-// -----------------------------------------------------------------------------
-export const realtorPartners = pgTable(
-  "realtor_partners",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    organizationId: uuid("organization_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
-    displayName: text("display_name").notNull(),
-    email: text("email").notNull(),
-    phone: text("phone"),
-    slug: text("slug").notNull(),
-    brokerage: text("brokerage"),
-    // Stored as text for consistency with hasFiledTaxes/heavyWriteOffs pattern
-    active: text("active").notNull().default("true"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => ({
-    orgIdx: index("realtor_partners_org_idx").on(table.organizationId),
-    orgSlugIdx: uniqueIndex("realtor_partners_org_slug_idx").on(
-      table.organizationId,
-      table.slug,
-    ),
   }),
 );
 

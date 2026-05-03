@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { db } from "@/db/client";
 import { teamMembers } from "@/db/schema";
+import { normalizeStaffRole } from "@/lib/auth-roles";
 import { createClient } from "./server";
 
 export interface AuthContext {
@@ -16,7 +17,10 @@ export interface AuthContext {
   email: string;
   displayName: string;
   organizationId: string;
+  /** Raw DB value: `admin`, `loan_officer`, legacy `agent`, or `realtor_partner`. */
   role: string;
+  /** Set when `role` is `realtor_partner` — ties the user to `leads.realtor_partner_id`. */
+  realtorPartnerId: string | null;
 }
 
 export async function getAuthContext(): Promise<AuthContext> {
@@ -47,6 +51,7 @@ export async function getAuthContext(): Promise<AuthContext> {
     email: user.email ?? member.email,
     displayName: member.displayName,
     organizationId: member.organizationId,
-    role: member.role,
+    role: normalizeStaffRole(member.role),
+    realtorPartnerId: member.realtorPartnerId ?? null,
   };
 }

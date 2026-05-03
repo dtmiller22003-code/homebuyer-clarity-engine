@@ -9,6 +9,9 @@ interface LeadFeedProps {
   onSelect: (id: string) => void;
   sortBy: SortOption;
   onSortChange: (sort: SortOption) => void;
+  showAdminDelete?: boolean;
+  onAdminDeleteLead?: (lead: Lead) => void;
+  deleteDisabled?: boolean;
 }
 
 export function LeadFeed({
@@ -17,6 +20,9 @@ export function LeadFeed({
   onSelect,
   sortBy,
   onSortChange,
+  showAdminDelete,
+  onAdminDeleteLead,
+  deleteDisabled,
 }: LeadFeedProps) {
   return (
     <div className="flex flex-col h-full bg-surface-50">
@@ -57,7 +63,10 @@ export function LeadFeed({
               key={lead.id}
               lead={lead}
               selected={lead.id === selectedId}
-              onClick={() => onSelect(lead.id)}
+              onSelect={() => onSelect(lead.id)}
+              showAdminDelete={showAdminDelete}
+              onAdminDelete={onAdminDeleteLead}
+              deleteDisabled={deleteDisabled}
             />
           ))
         )}

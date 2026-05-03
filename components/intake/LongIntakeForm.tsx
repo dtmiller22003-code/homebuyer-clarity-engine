@@ -33,6 +33,7 @@ const textareaClass =
 export interface LongIntakeFormProps {
   organizationId: string;
   referrerLoSlug?: string;
+  realtorPartnerSlug?: string;
   brandColors: IntakeBrandColors;
 }
 
@@ -116,6 +117,7 @@ function validateStep1(
 export function LongIntakeForm({
   organizationId,
   referrerLoSlug,
+  realtorPartnerSlug,
   brandColors,
 }: LongIntakeFormProps) {
   const router = useRouter();
@@ -229,6 +231,7 @@ export function LongIntakeForm({
     const payload: IntakeInput = {
       organizationId,
       referrerLoSlug: referrerLoSlug?.trim() || undefined,
+      realtorPartnerSlug: realtorPartnerSlug?.trim() || undefined,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       email: email.trim(),

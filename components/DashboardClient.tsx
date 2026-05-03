@@ -1,14 +1,16 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { Lead, LeadStatus } from "@/lib/types";
+import type { Lead } from "@/lib/types";
 import { StatsBar } from "@/components/StatsBar";
 import { Sidebar, type FilterState } from "@/components/Sidebar";
 import { LeadFeed } from "@/components/LeadFeed";
-import { DetailPanel, type PanelAction } from "@/components/DetailPanel";
+import { DetailPanel } from "@/components/DetailPanel";
 import { TopBar } from "@/components/TopBar";
-import { updateLeadStatus } from "@/app/actions/leads";
+import { deleteLead } from "@/app/actions/leads";
+import { downloadLeadsCsv } from "@/lib/export-leads-csv";
+import { isAdminRole, isInternalStaffRole } from "@/lib/auth-roles";
 
 type SortOption = "newest" | "oldest" | "readiness";
 
@@ -17,6 +19,9 @@ const READINESS_WEIGHT = {
   NEARLY_READY: 1,
   NOT_READY_YET: 2,
 };
+
+const DELETE_LEAD_CONFIRM =
+  "Are you sure you want to delete this lead? This cannot be undone.";
 
 interface DashboardClientProps {
   initialLeads: Lead[];
@@ -30,14 +35,15 @@ export function DashboardClient({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  // Local state is hydrated from server data.
-  // Server actions revalidate the page; we also do optimistic updates for snappy UX.
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [selectedId, setSelectedId] = useState<string | null>(
     initialLeads[0]?.id ?? null,
   );
   const [sortBy, setSortBy] = useState<SortOption>("newest");
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
   const [filters, setFilters] = useState<FilterState>({
     readiness: "ALL",
     loanPath: "ALL",
@@ -46,6 +52,20 @@ export function DashboardClient({
     search: "",
   });
 
+  useEffect(() => {
+    setLeads(initialLeads);
+  }, [initialLeads]);
+
+  useEffect(() => {
+    setSelectedId((sid) => {
+      if (sid && initialLeads.some((l) => l.id === sid)) return sid;
+      return initialLeads[0]?.id ?? null;
+    });
+  }, [initialLeads]);
+
+  const canExport = isInternalStaffRole(currentUser.role);
+  const canDeleteLeads = isAdminRole(currentUser.role);
+
   const availableAssignees = useMemo(() => {
     const set = new Set(leads.map((l) => l.assignedTo));
     return Array.from(set).sort();
@@ -53,10 +73,6 @@ export function DashboardClient({
 
   const visibleLeads = useMemo(() => {
     const filtered = leads.filter((lead) => {
-      if (lead.status === "archived" && filters.readiness === "ALL") {
-        // Hide archived leads by default unless explicitly filtering
-        // Phase 3: add an explicit "show archived" toggle
-      }
       if (
         filters.readiness !== "ALL" &&
         lead.decision.readiness !== filters.readiness
@@ -106,71 +122,26 @@ export function DashboardClient({
 
   const selectedLead = leads.find((l) => l.id === selectedId) ?? null;
 
-  // Show a toast briefly
-  const flashToast = (message: string) => {
-    setToast(message);
-    setTimeout(() => setToast(null), 2500);
+  const flashToast = (type: "success" | "error", message: string) => {
+    setToast({ type, message });
+    window.setTimeout(() => setToast(null), 4000);
   };
 
-  // Map an action to the new status
-  const actionToStatus = (action: PanelAction): LeadStatus | null => {
-    switch (action) {
-      case "approve":
-        return "approved";
-      case "archive":
-        return "archived";
-      case "send_to_crm":
-        return "sent_to_crm";
-      case "edit":
-        return null; // handled separately (opens modal in Phase 2B)
-    }
+  const handleExportCsv = () => {
+    downloadLeadsCsv(visibleLeads, "leads-export.csv");
+    flashToast("success", "Export started — check your downloads.");
   };
 
-  const handleAction = (action: PanelAction, lead: Lead) => {
-    if (action === "edit") {
-      flashToast("Inline edit ships with buyer intake form in Phase 2B.");
-      return;
-    }
-
-    const newStatus = actionToStatus(action);
-    if (!newStatus) return;
-
-    // Optimistic update
-    setLeads((prev) =>
-      prev.map((l) =>
-        l.id === lead.id
-          ? { ...l, status: newStatus, lastUpdated: new Date().toISOString() }
-          : l,
-      ),
-    );
+  const handleAdminDeleteLead = (lead: Lead) => {
+    if (!window.confirm(DELETE_LEAD_CONFIRM)) return;
 
     startTransition(async () => {
-      const result = await updateLeadStatus({
-        leadId: lead.id,
-        status: newStatus,
-      });
-
+      const result = await deleteLead(lead.id);
       if (!result.ok) {
-        // Revert on failure
-        setLeads((prev) =>
-          prev.map((l) => (l.id === lead.id ? lead : l)),
-        );
-        flashToast(`Failed: ${result.error}`);
+        flashToast("error", result.error);
         return;
       }
-
-      // Action-specific toasts
-      if (action === "send_to_crm") {
-        flashToast(
-          `${lead.firstName} ${lead.lastName} marked for CRM sync. Live integration in Phase 5.`,
-        );
-      } else if (action === "approve") {
-        flashToast(`${lead.firstName} ${lead.lastName} approved.`);
-      } else if (action === "archive") {
-        flashToast(`${lead.firstName} ${lead.lastName} archived.`);
-      }
-
-      // Let Next.js refresh from server too so we stay in sync
+      flashToast("success", "Lead deleted successfully.");
       router.refresh();
     });
   };
@@ -179,6 +150,18 @@ export function DashboardClient({
     <div className="h-screen flex flex-col bg-surface-50">
       <TopBar user={currentUser} />
       <StatsBar leads={leads} />
+
+      {canExport ? (
+        <div className="px-6 py-2 flex justify-end bg-white border-b border-surface-200">
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            className="text-sm font-medium text-surface-800 border border-surface-300 rounded-md px-3 py-1.5 hover:bg-surface-50"
+          >
+            Export to CSV
+          </button>
+        </div>
+      ) : null}
 
       <div className="flex-1 flex overflow-hidden">
         <Sidebar
@@ -197,24 +180,30 @@ export function DashboardClient({
               onSelect={setSelectedId}
               sortBy={sortBy}
               onSortChange={setSortBy}
+              showAdminDelete={canDeleteLeads}
+              onAdminDeleteLead={handleAdminDeleteLead}
+              deleteDisabled={isPending}
             />
           </div>
 
           <div className="w-[440px] border-l border-surface-200 shrink-0">
-            <DetailPanel
-              lead={selectedLead}
-              onAction={handleAction}
-              disabled={isPending}
-            />
+            <DetailPanel lead={selectedLead} />
           </div>
         </main>
       </div>
 
-      {toast && (
-        <div className="fixed bottom-4 right-4 bg-surface-900 text-white text-sm px-4 py-2.5 rounded shadow-lg animate-in fade-in slide-in-from-bottom-2">
-          {toast}
+      {toast ? (
+        <div
+          className={`fixed bottom-4 right-4 text-sm px-4 py-2.5 rounded shadow-lg animate-in fade-in slide-in-from-bottom-2 ${
+            toast.type === "success"
+              ? "bg-surface-900 text-white"
+              : "bg-red-700 text-white"
+          }`}
+          role="status"
+        >
+          {toast.message}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

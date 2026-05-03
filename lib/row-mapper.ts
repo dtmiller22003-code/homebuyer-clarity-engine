@@ -33,6 +33,7 @@ export function rowToLead(row: LeadRow): Lead {
     targetPurchasePrice: row.targetPurchasePrice ?? undefined,
     notes: row.notes ?? undefined,
     status: row.status,
+    realtorPartnerId: row.realtorPartnerId ?? null,
   };
 
   return { ...inputs, decision: row.decision };

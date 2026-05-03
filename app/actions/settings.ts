@@ -63,7 +63,7 @@ const updateTeamMemberSchema = z.object({
   phone: z.string().max(40).nullable().optional(),
   slug: z.string().nullable().optional(),
   bio: z.string().max(4000).nullable().optional(),
-  role: z.enum(["admin", "agent"]),
+  role: z.enum(["admin", "agent", "loan_officer"]),
 });
 
 function normalizeSlug(raw: string | null | undefined): string | null {

@@ -10,6 +10,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db/client";
 import { leadEvents, leads } from "@/db/schema";
+import {
+  isAdminRole,
+  isInternalStaffRole,
+  isRealtorPartnerRole,
+} from "@/lib/auth-roles";
 import { getAuthContext } from "@/lib/supabase/auth";
 import { evaluateLead } from "@/lib/decision-engine";
 import { rowToLead } from "@/lib/row-mapper";
@@ -22,10 +27,16 @@ import type { Lead, LeadStatus } from "@/lib/types";
 export async function listLeads(): Promise<Lead[]> {
   const auth = await getAuthContext();
 
+  const orgScope = eq(leads.organizationId, auth.organizationId);
+  const whereClause =
+    isRealtorPartnerRole(auth.role) && auth.realtorPartnerId
+      ? and(orgScope, eq(leads.realtorPartnerId, auth.realtorPartnerId))
+      : orgScope;
+
   const rows = await db
     .select()
     .from(leads)
-    .where(eq(leads.organizationId, auth.organizationId))
+    .where(whereClause)
     .orderBy(leads.lastUpdated);
 
   return rows.map(rowToLead);
@@ -44,6 +55,9 @@ export async function updateLeadStatus(input: {
   status: LeadStatus;
 }) {
   const auth = await getAuthContext();
+  if (!isInternalStaffRole(auth.role)) {
+    return { ok: false as const, error: "Access denied" };
+  }
   const parsed = statusUpdateSchema.parse(input);
 
   // Update only if the lead belongs to the same org
@@ -76,6 +90,39 @@ export async function updateLeadStatus(input: {
 
   revalidatePath("/");
   return { ok: true as const, lead: rowToLead(updated) };
+}
+
+// -----------------------------------------------------------------------------
+// deleteLead — admin only; cascades lead_events / lead_documents via FK.
+// -----------------------------------------------------------------------------
+export async function deleteLead(
+  leadId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const auth = await getAuthContext();
+  if (!isAdminRole(auth.role)) {
+    return { ok: false, error: "Only administrators can delete leads." };
+  }
+
+  const uuid = z.string().uuid().safeParse(leadId);
+  if (!uuid.success) {
+    return { ok: false, error: "Invalid lead id." };
+  }
+
+  const removed = await db
+    .delete(leads)
+    .where(
+      and(eq(leads.id, leadId), eq(leads.organizationId, auth.organizationId)),
+    )
+    .returning({ id: leads.id });
+
+  if (removed.length === 0) {
+    return { ok: false, error: "Lead not found or you do not have access." };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/realtor");
+  revalidatePath("/settings/realtors");
+  return { ok: true };
 }
 
 // -----------------------------------------------------------------------------
@@ -114,6 +161,9 @@ const leadInputsSchema = z.object({
 
 export async function updateLeadInputs(input: z.infer<typeof leadInputsSchema>) {
   const auth = await getAuthContext();
+  if (!isInternalStaffRole(auth.role)) {
+    return { ok: false as const, error: "Access denied" };
+  }
   const parsed = leadInputsSchema.parse(input);
 
   // Fetch current row to confirm org access

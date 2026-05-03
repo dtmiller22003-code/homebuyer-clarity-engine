@@ -13,7 +13,7 @@ interface TeamMemberVM {
   phone: string | null;
   slug: string | null;
   bio: string | null;
-  role: "admin" | "agent";
+  role: "admin" | "agent" | "loan_officer";
 }
 
 export function TeamSettingsClient({
@@ -149,14 +149,15 @@ export function TeamSettingsClient({
                       const next = [...rows];
                       next[idx] = {
                         ...member,
-                        role: e.target.value as "admin" | "agent",
+                        role: e.target.value as TeamMemberVM["role"],
                       };
                       setRows(next);
                     }}
                     className="rounded border border-surface-300 px-2 py-1.5"
                   >
                     <option value="admin">admin</option>
-                    <option value="agent">agent</option>
+                    <option value="loan_officer">loan officer</option>
+                    <option value="agent">agent (legacy)</option>
                   </select>
                 </td>
                 <td className="py-2 pr-2">

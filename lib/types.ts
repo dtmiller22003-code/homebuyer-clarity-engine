@@ -93,6 +93,9 @@ export interface LeadInputs {
 
   notes?: string;
   status: LeadStatus;
+
+  /** Present when the lead came in via a realtor partner link. */
+  realtorPartnerId?: string | null;
 }
 
 // =============================================================================

@@ -13,11 +13,7 @@ import { PillarScore } from "./PillarScore";
 
 interface DetailPanelProps {
   lead: Lead | null;
-  onAction: (action: PanelAction, lead: Lead) => void;
-  disabled?: boolean;
 }
-
-export type PanelAction = "approve" | "edit" | "send_to_crm" | "archive";
 
 const readinessVariant = {
   READY_NOW: "strong" as const,
@@ -25,7 +21,7 @@ const readinessVariant = {
   NOT_READY_YET: "weak" as const,
 };
 
-export function DetailPanel({ lead, onAction, disabled }: DetailPanelProps) {
+export function DetailPanel({ lead }: DetailPanelProps) {
   if (!lead) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-white text-center p-8">
@@ -194,36 +190,6 @@ export function DetailPanel({ lead, onAction, disabled }: DetailPanelProps) {
           </Section>
         )}
       </div>
-
-      {/* Sticky action bar */}
-      <div className="border-t border-surface-200 px-6 py-3 bg-white">
-        <div className="grid grid-cols-2 gap-2">
-          <ActionButton
-            label="Approve"
-            variant="primary"
-            onClick={() => onAction("approve", lead)}
-            disabled={disabled}
-          />
-          <ActionButton
-            label="Send to CRM"
-            variant="primary-outline"
-            onClick={() => onAction("send_to_crm", lead)}
-            disabled={disabled}
-          />
-          <ActionButton
-            label="Edit"
-            variant="secondary"
-            onClick={() => onAction("edit", lead)}
-            disabled={disabled}
-          />
-          <ActionButton
-            label="Archive"
-            variant="danger-outline"
-            onClick={() => onAction("archive", lead)}
-            disabled={disabled}
-          />
-        </div>
-      </div>
     </div>
   );
 }
@@ -323,33 +289,3 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
   );
 }
 
-function ActionButton({
-  label,
-  variant,
-  onClick,
-  disabled,
-}: {
-  label: string;
-  variant: "primary" | "primary-outline" | "secondary" | "danger-outline";
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  const classes: Record<typeof variant, string> = {
-    primary: "bg-brand hover:bg-brand-hover text-white",
-    "primary-outline":
-      "bg-white border border-brand text-brand hover:bg-brand/5",
-    secondary:
-      "bg-white border border-surface-300 text-surface-700 hover:bg-surface-50",
-    "danger-outline":
-      "bg-white border border-surface-300 text-red-700 hover:bg-red-50 hover:border-red-300",
-  };
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`w-full py-2 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${classes[variant]}`}
-    >
-      {label}
-    </button>
-  );
-}

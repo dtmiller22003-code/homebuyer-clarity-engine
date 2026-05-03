@@ -29,6 +29,7 @@ import {
   leadEvents,
   organizations,
   rateLimits,
+  realtorPartners,
   teamMembers,
 } from "@/db/schema";
 import { evaluateLead } from "@/lib/decision-engine";
@@ -90,6 +91,8 @@ function mockPublicResult(leadId: string): PublicResult {
 const intakeSchema = z.object({
   organizationId: z.string().uuid(),
   referrerLoSlug: z.string().trim().toLowerCase().optional(),
+  /** Public partner slug from `/apply/realtor/[slug]` or `?partner=` — resolved server-side. */
+  realtorPartnerSlug: z.string().trim().min(1).max(80).optional(),
 
   firstName: z.string().trim().min(1).max(100),
   lastName: z.string().trim().min(1).max(100),
@@ -213,6 +216,26 @@ export async function submitIntake(
       return { ok: false, error: "We couldn't locate the brokerage. Please refresh and try again." };
     }
 
+    // 3b. Resolve realtor partner (optional) — ties the lead to a partner record when valid.
+    let resolvedRealtorPartnerId: string | null = null;
+    if (data.realtorPartnerSlug) {
+      const slug = data.realtorPartnerSlug.trim().toLowerCase();
+      const [partner] = await db
+        .select()
+        .from(realtorPartners)
+        .where(
+          and(
+            eq(realtorPartners.organizationId, org.id),
+            eq(realtorPartners.slug, slug),
+            eq(realtorPartners.active, "true"),
+          ),
+        )
+        .limit(1);
+      if (partner) {
+        resolvedRealtorPartnerId = partner.id;
+      }
+    }
+
     // 4. Resolve assignee
     // Priority: (a) referrerLoSlug if valid, (b) org.defaultAssigneeId, (c) fallback string.
     let assignedToName = "Unassigned";
@@ -275,6 +298,7 @@ export async function submitIntake(
       .values({
         ...insertRow,
         referrerLoSlug: data.referrerLoSlug ?? null,
+        realtorPartnerId: resolvedRealtorPartnerId,
       })
       .returning();
 
@@ -291,6 +315,7 @@ export async function submitIntake(
       metadata: {
         formLength: data.formLength,
         referrerLoSlug: data.referrerLoSlug ?? null,
+        realtorPartnerSlug: data.realtorPartnerSlug ?? null,
         leadSource: data.leadSource,
       },
     });

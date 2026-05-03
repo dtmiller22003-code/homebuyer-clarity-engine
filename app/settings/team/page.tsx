@@ -35,8 +35,11 @@ export default async function TeamSettingsPage() {
     .where(eq(teamMembers.organizationId, auth.organizationId));
 
   const normalizedMembers = members
-    .filter((m): m is typeof m & { role: "admin" | "agent" } =>
-      m.role === "admin" || m.role === "agent",
+    .filter(
+      (m): m is typeof m & { role: "admin" | "agent" | "loan_officer" } =>
+        m.role === "admin" ||
+        m.role === "agent" ||
+        m.role === "loan_officer",
     )
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 

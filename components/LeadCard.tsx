@@ -13,7 +13,11 @@ import { PillarScore } from "./PillarScore";
 interface LeadCardProps {
   lead: Lead;
   selected: boolean;
-  onClick: () => void;
+  onSelect: () => void;
+  /** Administrators only — deletes the lead after confirmation in the parent. */
+  showAdminDelete?: boolean;
+  onAdminDelete?: (lead: Lead) => void;
+  deleteDisabled?: boolean;
 }
 
 const readinessVariant = {
@@ -35,20 +39,31 @@ function formatRelativeTime(iso: string): string {
   return `${weeks}w ago`;
 }
 
-export function LeadCard({ lead, selected, onClick }: LeadCardProps) {
+export function LeadCard({
+  lead,
+  selected,
+  onSelect,
+  showAdminDelete,
+  onAdminDelete,
+  deleteDisabled,
+}: LeadCardProps) {
   const { decision } = lead;
   const fullName = `${lead.firstName} ${lead.lastName}`;
   const initials = `${lead.firstName[0]}${lead.lastName[0]}`;
 
   return (
-    <button
-      onClick={onClick}
-      className={`w-full text-left bg-white border rounded-md p-4 transition-all hover:shadow-sm ${
+    <div
+      className={`flex bg-white border rounded-md overflow-hidden transition-all hover:shadow-sm ${
         selected
           ? "border-brand ring-2 ring-brand/20"
           : "border-surface-200 hover:border-surface-300"
       }`}
     >
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex-1 min-w-0 text-left p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30"
+      >
       {/* Header: name, readiness, loan path */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -105,7 +120,23 @@ export function LeadCard({ lead, selected, onClick }: LeadCardProps) {
           {decision.strongPillarCount}/3 strong
         </div>
       </div>
-    </button>
+      </button>
+      {showAdminDelete ? (
+        <div className="shrink-0 border-l border-surface-200 flex flex-col justify-center p-2 bg-surface-50">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAdminDelete?.(lead);
+            }}
+            disabled={deleteDisabled}
+            className="text-xs font-medium text-red-700 hover:text-red-900 px-2 py-1.5 rounded border border-red-200 hover:bg-red-50 disabled:opacity-50 whitespace-nowrap"
+          >
+            Delete
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
