@@ -4,7 +4,6 @@ import {
   CREDIT_RANGE_LABELS,
   EMPLOYMENT_LABELS,
   INCOME_RANGE_LABELS,
-  LEAD_ATTRIBUTION_SOURCE_LABELS,
   LEAD_SOURCE_LABELS,
   LOAN_PATH_LABELS,
   READINESS_LABELS,
@@ -97,14 +96,29 @@ export function DetailPanel({ lead }: DetailPanelProps) {
               value={LEAD_SOURCE_LABELS[lead.leadSource]}
             />
             <MetaRow
-              label="Attribution"
-              value={(() => {
-                const st = lead.sourceType ?? "company";
-                if (st === "company") {
-                  return LEAD_ATTRIBUTION_SOURCE_LABELS.company;
-                }
-                return `${LEAD_ATTRIBUTION_SOURCE_LABELS[st]}${lead.sourceSlug ? ` · ${lead.sourceSlug}` : ""}`;
-              })()}
+              label="Intake source"
+              value={
+                lead.intakeSourceLine ??
+                (() => {
+                  const st = lead.sourceType ?? "company";
+                  if (st === "company") {
+                    return "Source: Company";
+                  }
+                  if (st === "realtor") {
+                    const tail =
+                      lead.sourceDisplayName?.trim() ||
+                      lead.sourceSlug ||
+                      "Unknown realtor";
+                    return `Source: Realtor – ${tail}`;
+                  }
+                  const tail =
+                    lead.sourceDisplayName?.trim() ||
+                    lead.sourceSlug ||
+                    lead.assignedTo ||
+                    "Unknown loan officer";
+                  return `Source: Loan Officer – ${tail}`;
+                })()
+              }
             />
             <MetaRow
               label="Employment"

@@ -9,8 +9,10 @@ import { LeadFeed } from "@/components/LeadFeed";
 import { DetailPanel } from "@/components/DetailPanel";
 import { TopBar } from "@/components/TopBar";
 import { bulkDeleteLeads, deleteLead } from "@/app/actions/leads";
+import type { RealtorLeaderboardSnapshot } from "@/app/actions/realtor-performance";
 import { downloadLeadsCsv } from "@/lib/export-leads-csv";
 import { isAdminRole, isInternalStaffRole } from "@/lib/auth-roles";
+import { RealtorPerformanceLeaderboards } from "@/components/RealtorPerformanceLeaderboards";
 
 type SortOption = "newest" | "oldest" | "readiness";
 
@@ -33,11 +35,14 @@ const BULK_DELETE_TOO_MANY_MSG =
 interface DashboardClientProps {
   initialLeads: Lead[];
   currentUser: { displayName: string; email: string; role: string };
+  /** Admin-only; omitted or null for loan officers. */
+  realtorLeaderboards?: RealtorLeaderboardSnapshot | null;
 }
 
 export function DashboardClient({
   initialLeads,
   currentUser,
+  realtorLeaderboards = null,
 }: DashboardClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -234,6 +239,17 @@ export function DashboardClient({
       <TopBar user={currentUser} />
       <StatsBar leads={leads} />
 
+      {realtorLeaderboards &&
+      (realtorLeaderboards.topThisMonth.length > 0 ||
+        realtorLeaderboards.topConverters.length > 0) ? (
+        <div className="shrink-0 px-6 py-3 bg-white border-b border-surface-200">
+          <p className="text-[11px] font-medium text-surface-500 uppercase tracking-wide mb-2">
+            Realtor performance (admin only)
+          </p>
+          <RealtorPerformanceLeaderboards data={realtorLeaderboards} />
+        </div>
+      ) : null}
+
       {canExport ? (
         <div className="px-6 py-2 flex justify-end bg-white border-b border-surface-200">
           <button
@@ -299,6 +315,7 @@ export function DashboardClient({
                 allVisibleSelected={allVisibleSelected}
                 someVisibleSelected={someVisibleSelected}
                 onSelectAllVisible={handleSelectAllVisible}
+                showIntakeSource={isInternalStaffRole(currentUser.role)}
               />
             </div>
           </div>

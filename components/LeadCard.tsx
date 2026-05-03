@@ -25,6 +25,7 @@ interface LeadCardProps {
   bulkChecked?: boolean;
   onBulkToggle?: (leadId: string, checked: boolean) => void;
   bulkDisabled?: boolean;
+  showIntakeSource?: boolean;
 }
 
 const readinessVariant = {
@@ -57,6 +58,7 @@ export function LeadCard({
   bulkChecked,
   onBulkToggle,
   bulkDisabled,
+  showIntakeSource,
 }: LeadCardProps) {
   const { decision } = lead;
   const fullName = `${lead.firstName} ${lead.lastName}`;
@@ -103,6 +105,11 @@ export function LeadCard({
             <div className="text-xs text-surface-500 truncate">
               {lead.email} · {formatRelativeTime(lead.lastUpdated)}
             </div>
+            {showIntakeSource && lead.intakeSourceLine ? (
+              <div className="text-xs text-surface-700 mt-1 font-medium truncate">
+                {lead.intakeSourceLine}
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">

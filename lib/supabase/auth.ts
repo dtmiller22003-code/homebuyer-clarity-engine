@@ -5,10 +5,10 @@
 // Use at the top of every server action / protected server component.
 // =============================================================================
 
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { db } from "@/db/client";
-import { teamMembers } from "@/db/schema";
+import { realtorPartners, teamMembers } from "@/db/schema";
 import { normalizeStaffRole } from "@/lib/auth-roles";
 import { createClient } from "./server";
 
@@ -44,6 +44,26 @@ export async function getAuthContext(): Promise<AuthContext> {
     // User exists in Supabase auth but not in our team_members table.
     // This means they were never invited/provisioned. Send them to an error page.
     redirect("/login?error=not_provisioned");
+  }
+
+  if (member.role === "realtor_partner" && member.realtorPartnerId) {
+    const [partner] = await db
+      .select({
+        isActive: realtorPartners.isActive,
+        deletedAt: realtorPartners.deletedAt,
+      })
+      .from(realtorPartners)
+      .where(
+        and(
+          eq(realtorPartners.id, member.realtorPartnerId),
+          isNull(realtorPartners.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!partner || !partner.isActive) {
+      redirect("/login?error=realtor_inactive");
+    }
   }
 
   return {

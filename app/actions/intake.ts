@@ -20,7 +20,7 @@
 
 "use server";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { db } from "@/db/client";
@@ -224,6 +224,7 @@ export async function submitIntake(
     // 3b. Resolve realtor partner (optional) — ties the lead to a partner record when valid.
     let resolvedRealtorPartnerId: string | null = null;
     let resolvedRealtorSlug: string | null = null;
+    let resolvedRealtorDisplayName: string | null = null;
     if (data.realtorPartnerSlug) {
       const slug = data.realtorPartnerSlug.trim().toLowerCase();
       const [partner] = await db
@@ -233,13 +234,15 @@ export async function submitIntake(
           and(
             eq(realtorPartners.organizationId, org.id),
             eq(realtorPartners.slug, slug),
-            eq(realtorPartners.active, "true"),
+            eq(realtorPartners.isActive, true),
+            isNull(realtorPartners.deletedAt),
           ),
         )
         .limit(1);
       if (partner) {
         resolvedRealtorPartnerId = partner.id;
         resolvedRealtorSlug = partner.slug;
+        resolvedRealtorDisplayName = partner.displayName;
       }
     }
 
@@ -277,6 +280,13 @@ export async function submitIntake(
       sourceType = "loan_officer";
       sourceSlug = intakeReferrer.slug;
       sourceTeamMemberId = intakeReferrer.id;
+    }
+
+    let sourceDisplayName: string | null = null;
+    if (sourceType === "realtor" && resolvedRealtorDisplayName) {
+      sourceDisplayName = resolvedRealtorDisplayName.trim() || null;
+    } else if (sourceType === "loan_officer" && intakeReferrer) {
+      sourceDisplayName = intakeReferrer.displayName.trim() || null;
     }
 
     if (assignedToName === "Unassigned" && org.defaultAssigneeId) {
@@ -323,6 +333,7 @@ export async function submitIntake(
         realtorPartnerId: resolvedRealtorPartnerId,
         sourceType,
         sourceSlug,
+        sourceDisplayName,
         sourceTeamMemberId,
       })
       .returning();

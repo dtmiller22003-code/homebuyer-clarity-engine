@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { handleRealtorApplyLink } from "@/lib/apply-partner-redirect";
 
@@ -17,8 +18,38 @@ export default async function ApplyRealtorPartnerPage({
   if ("notFound" in result) {
     notFound();
   }
+  if ("inactive" in result) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-12 sm:py-16 text-center">
+        <div className="rounded-xl border border-surface-200 bg-white p-8 shadow-sm">
+          <h1 className="text-lg font-semibold text-surface-900">
+            This partner link is no longer active
+          </h1>
+          <p className="mt-3 text-sm text-surface-600 leading-relaxed">
+            You can still continue to the company application using the link
+            below.
+          </p>
+          <a
+            href={result.companyApplicationUrl}
+            className="mt-6 inline-flex w-full justify-center rounded-md bg-[color:var(--brand-primary,#1e40af)] px-4 py-3 text-sm font-semibold text-white hover:opacity-90"
+          >
+            Continue to application
+          </a>
+          <p className="mt-4 text-xs text-surface-500">
+            <Link href="/apply/short" className="text-brand hover:underline">
+              Or start a quick check without a partner link
+            </Link>
+          </p>
+        </div>
+      </div>
+    );
+  }
   if (result.mode === "redirect") {
     redirect(result.url);
+  }
+
+  if (result.mode !== "branding") {
+    notFound();
   }
 
   const { externalUrl, partner } = result;

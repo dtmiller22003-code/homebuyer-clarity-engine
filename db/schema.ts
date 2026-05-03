@@ -18,6 +18,7 @@
 // - NEW: lead_documents (lead file metadata + Supabase Storage pointer)
 // =============================================================================
 
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   pgEnum,
@@ -28,6 +29,7 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  boolean,
 } from "drizzle-orm/pg-core";
 import type { LeadDecision } from "@/lib/types";
 
@@ -147,17 +149,21 @@ export const realtorPartners = pgTable(
     subtitle: text("subtitle"),
     /** Optional override for /apply/realtor/[slug] redirect; else company default. */
     defaultApplicationLink: text("default_application_link"),
-    active: text("active").notNull().default("true"),
+    /** When false, partner cannot sign in or receive public apply traffic. */
+    isActive: boolean("is_active").notNull().default(true),
+    /** Soft delete — row retained for reporting; null = not removed. */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => ({
     orgIdx: index("realtor_partners_org_idx").on(table.organizationId),
-    orgSlugIdx: uniqueIndex("realtor_partners_org_slug_idx").on(
+    /** Uniqueness only among partners not soft-deleted (frees slug after removal). */
+    orgSlugAliveIdx: uniqueIndex("realtor_partners_org_slug_alive_idx").on(
       table.organizationId,
       table.slug,
-    ),
+    ).where(sql`${table.deletedAt} is null`),
   }),
 );
 
@@ -271,6 +277,11 @@ export const leads = pgTable(
     /** Intake attribution: company | realtor | loan_officer */
     sourceType: text("source_type").notNull().default("company"),
     sourceSlug: text("source_slug"),
+    /**
+     * Snapshot of partner or LO display name at intake (or backfilled on partner deactivate).
+     * Preserves reporting if `realtor_partner_id` is later cleared.
+     */
+    sourceDisplayName: text("source_display_name"),
     sourceTeamMemberId: uuid("source_team_member_id").references(
       () => teamMembers.id,
       { onDelete: "set null" },

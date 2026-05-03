@@ -102,8 +102,16 @@ export interface LeadInputs {
 
   sourceType?: LeadAttributionSource;
   sourceSlug?: string | null;
+  /** Snapshot name for reporting when partner / LO row is missing. */
+  sourceDisplayName?: string | null;
   /** Loan officer team member when source is loan_officer. */
   sourceTeamMemberId?: string | null;
+
+  /**
+   * Staff dashboards only — set when listing leads from the server.
+   * e.g. "Source: Realtor – Desmond Miller"
+   */
+  intakeSourceLine?: string;
 }
 
 // =============================================================================

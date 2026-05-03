@@ -22,6 +22,8 @@ interface LeadFeedProps {
   allVisibleSelected?: boolean;
   someVisibleSelected?: boolean;
   onSelectAllVisible?: () => void;
+  /** Staff dashboard — show intake attribution (realtor / LO / company). */
+  showIntakeSource?: boolean;
 }
 
 export function LeadFeed({
@@ -40,6 +42,7 @@ export function LeadFeed({
   allVisibleSelected,
   someVisibleSelected,
   onSelectAllVisible,
+  showIntakeSource,
 }: LeadFeedProps) {
   const bulkSet = new Set(bulkSelectedIds);
   const selectAllRef = useRef<HTMLInputElement>(null);
@@ -112,6 +115,7 @@ export function LeadFeed({
               bulkChecked={bulkSet.has(lead.id)}
               onBulkToggle={onBulkToggle}
               bulkDisabled={bulkDisabled}
+              showIntakeSource={showIntakeSource}
             />
           ))
         )}

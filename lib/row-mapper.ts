@@ -36,6 +36,7 @@ export function rowToLead(row: LeadRow): Lead {
     realtorPartnerId: row.realtorPartnerId ?? null,
     sourceType: (row.sourceType as LeadAttributionSource | undefined) ?? "company",
     sourceSlug: row.sourceSlug ?? null,
+    sourceDisplayName: row.sourceDisplayName ?? null,
     sourceTeamMemberId: row.sourceTeamMemberId ?? null,
   };
 

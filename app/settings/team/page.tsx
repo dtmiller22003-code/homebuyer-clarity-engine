@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { InviteLoanOfficerForm } from "@/app/settings/team/InviteLoanOfficerForm";
 import { TeamSettingsClient } from "@/app/settings/team/TeamSettingsClient";
 import { db } from "@/db/client";
 import { organizations, teamMembers } from "@/db/schema";
@@ -63,9 +64,13 @@ export default async function TeamSettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold text-surface-900">Team</h1>
         <p className="text-sm text-surface-600 mt-1">
-          Manage LO public profiles, slugs, and default assignment.
+          Invite loan officers (Supabase Auth + team row + public{" "}
+          <code className="text-xs bg-surface-100 px-1 rounded">/apply/lo/…</code> link), or
+          edit existing profiles below.
         </p>
       </div>
+
+      <InviteLoanOfficerForm />
 
       <TeamSettingsClient
         members={normalizedMembers}

@@ -5,14 +5,17 @@
 
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   partnerApplyRedirectEvents,
   realtorPartners,
   teamMembers,
 } from "@/db/schema";
-import { resolveApplicationRedirectUrl } from "@/lib/default-application-url";
+import {
+  COMPANY_DEFAULT_APPLICATION_URL,
+  resolveApplicationRedirectUrl,
+} from "@/lib/default-application-url";
 import { getPublicOrganizationRow } from "@/lib/public-organization";
 
 export type RealtorApplyPartnerRow = {
@@ -48,6 +51,7 @@ export async function handleRealtorApplyLink(
   slugRaw: string,
 ): Promise<
   | { notFound: true }
+  | { inactive: true; companyApplicationUrl: string }
   | { mode: "redirect"; url: string }
   | { mode: "branding"; externalUrl: string; partner: RealtorApplyPartnerRow }
 > {
@@ -57,19 +61,28 @@ export async function handleRealtorApplyLink(
   const org = await getPublicOrganizationRow();
   if (!org) return { notFound: true };
 
-  const [partner] = await db
+  const [bySlug] = await db
     .select()
     .from(realtorPartners)
     .where(
       and(
         eq(realtorPartners.organizationId, org.id),
         eq(realtorPartners.slug, slug),
-        eq(realtorPartners.active, "true"),
+        isNull(realtorPartners.deletedAt),
       ),
     )
     .limit(1);
 
-  if (!partner) return { notFound: true };
+  if (!bySlug) return { notFound: true };
+
+  if (!bySlug.isActive) {
+    return {
+      inactive: true,
+      companyApplicationUrl: COMPANY_DEFAULT_APPLICATION_URL,
+    };
+  }
+
+  const partner = bySlug;
 
   await insertRedirectEvent({
     organizationId: org.id,

@@ -1,8 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+
+function errorMessageForParam(code: string | null): string | null {
+  if (code === "not_provisioned") {
+    return "Your account isn't provisioned yet. Contact your admin.";
+  }
+  if (code === "realtor_inactive") {
+    return "This realtor partner account is inactive or has been removed by your admin. Contact your admin if you need access.";
+  }
+  return null;
+}
 
 export function LoginForm() {
   const router = useRouter();
@@ -13,10 +23,15 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(
-    initialError === "not_provisioned"
-      ? "Your account isn't provisioned yet. Contact your admin."
-      : null,
+    errorMessageForParam(initialError),
   );
+
+  useEffect(() => {
+    if (searchParams.get("error") === "realtor_inactive") {
+      const supabase = createClient();
+      void supabase.auth.signOut();
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

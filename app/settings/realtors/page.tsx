@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { listRealtorPartnersAdmin } from "@/app/actions/realtors";
+import { getRealtorPartnerPerformanceAdmin } from "@/app/actions/realtor-performance";
 import { RealtorsAdminClient } from "@/app/settings/realtors/RealtorsAdminClient";
 import { isAdminRole } from "@/lib/auth-roles";
 import { getAuthContext } from "@/lib/supabase/auth";
@@ -10,22 +10,24 @@ export default async function RealtorsSettingsPage() {
     redirect("/");
   }
 
-  const partners = await listRealtorPartnersAdmin();
+  const { rows, leaderboards } = await getRealtorPartnerPerformanceAdmin();
 
   return (
     <div className="p-6 space-y-4">
       <div>
         <h1 className="text-2xl font-semibold text-surface-900">Realtor partners</h1>
         <p className="text-sm text-surface-600 mt-1">
-          Create partners and share their personal apply links. Leads from those
-          links are attributed to the partner. Provision realtor logins in
-          Supabase Auth and set team member role to{" "}
+          Create a partner to add their record, send a Supabase invite to their
+          email, and attach their{" "}
           <code className="text-xs bg-surface-100 px-1 rounded">realtor_partner</code>{" "}
-          with the matching partner id.
+          team login automatically. They sign in with the magic link and only see
+          leads attributed to them. Requires{" "}
+          <code className="text-xs bg-surface-100 px-1 rounded">SUPABASE_SERVICE_ROLE_KEY</code>{" "}
+          on the server (never exposed to the browser).
         </p>
       </div>
 
-      <RealtorsAdminClient initialPartners={partners} />
+      <RealtorsAdminClient initialRows={rows} leaderboards={leaderboards} />
     </div>
   );
 }

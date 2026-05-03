@@ -5,8 +5,9 @@
 // =============================================================================
 
 import { redirect } from "next/navigation";
+import { getRealtorPartnerPerformanceAdmin } from "@/app/actions/realtor-performance";
 import { listLeads } from "@/app/actions/leads";
-import { isRealtorPartnerRole } from "@/lib/auth-roles";
+import { isAdminRole, isRealtorPartnerRole } from "@/lib/auth-roles";
 import { getAuthContext } from "@/lib/supabase/auth";
 import { DashboardClient } from "@/components/DashboardClient";
 
@@ -16,7 +17,10 @@ export default async function DashboardPage() {
     redirect("/realtor");
   }
 
-  const leads = await listLeads();
+  const [leads, realtorPerf] = await Promise.all([
+    listLeads(),
+    isAdminRole(auth.role) ? getRealtorPartnerPerformanceAdmin() : null,
+  ]);
 
   return (
     <DashboardClient
@@ -26,6 +30,7 @@ export default async function DashboardPage() {
         email: auth.email,
         role: auth.role,
       }}
+      realtorLeaderboards={realtorPerf?.leaderboards ?? null}
     />
   );
 }

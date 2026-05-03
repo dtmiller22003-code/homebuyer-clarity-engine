@@ -17,6 +17,7 @@ import {
 } from "@/lib/auth-roles";
 import { getAuthContext } from "@/lib/supabase/auth";
 import { evaluateLead } from "@/lib/decision-engine";
+import { enrichLeadsWithIntakeSource } from "@/lib/enrich-lead-intake-source";
 import { rowToLead } from "@/lib/row-mapper";
 import type { Lead, LeadStatus } from "@/lib/types";
 
@@ -39,7 +40,11 @@ export async function listLeads(): Promise<Lead[]> {
     .where(whereClause)
     .orderBy(leads.lastUpdated);
 
-  return rows.map(rowToLead);
+  if (isRealtorPartnerRole(auth.role)) {
+    return rows.map(rowToLead);
+  }
+
+  return enrichLeadsWithIntakeSource(auth.organizationId, rows);
 }
 
 // -----------------------------------------------------------------------------
@@ -89,7 +94,10 @@ export async function updateLeadStatus(input: {
   });
 
   revalidatePath("/");
-  return { ok: true as const, lead: rowToLead(updated) };
+  const [enriched] = await enrichLeadsWithIntakeSource(auth.organizationId, [
+    updated,
+  ]);
+  return { ok: true as const, lead: enriched };
 }
 
 // -----------------------------------------------------------------------------
@@ -312,7 +320,10 @@ export async function updateLeadInputs(input: z.infer<typeof leadInputsSchema>) 
   });
 
   revalidatePath("/");
-  return { ok: true as const, lead: rowToLead(updated) };
+  const [enriched] = await enrichLeadsWithIntakeSource(auth.organizationId, [
+    updated,
+  ]);
+  return { ok: true as const, lead: enriched };
 }
 
 // -----------------------------------------------------------------------------
