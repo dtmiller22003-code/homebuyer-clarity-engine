@@ -93,6 +93,32 @@ function investmentLikelyNonQmDocLine(inputs: LeadInputs): string {
   return investmentIncomePathLine("writeoffs");
 }
 
+/** Primary / QM / 580+ FHA path only: keep 5K–15K bucket from scoring weak. */
+function shouldFloor5k15kPrimaryQmCashToModerate(
+  inputs: LeadInputs,
+  likelyNonQM: boolean,
+  isInvestment: boolean,
+): boolean {
+  if (isInvestment) return false;
+  if (inputs.cashAvailable !== "5K_15K") return false;
+  if (likelyNonQM) return false;
+  if (inputs.creditRange === "BELOW_580") return false;
+  return true;
+}
+
+const CASH_5K_15K_PRIMARY_MODERATE_OVERRIDE: PillarAnalysis = {
+  score: "moderate",
+  headline: "Room to grow",
+  detail:
+    "You may not have all the cash needed yet, but this may still be workable with seller concessions, lender credits, or down payment assistance depending on the loan program and property.",
+  factors: [
+    "Primary home purchase",
+    "Cash available is in the $5,000–$15,000 range",
+    "Seller concessions may help cover some closing costs",
+    "Down payment assistance may be available depending on eligibility",
+  ],
+};
+
 // -----------------------------------------------------------------------------
 // CREDIT PILLAR
 // -----------------------------------------------------------------------------
@@ -462,6 +488,9 @@ export function scoreCash(inputs: LeadInputs): PillarAnalysis {
   } else {
     factors.push("Down payment assistance may be available");
     factors.push("Seller concessions can reduce cash-to-close");
+  }
+  if (shouldFloor5k15kPrimaryQmCashToModerate(inputs, likelyNonQM, isInvestment)) {
+    return CASH_5K_15K_PRIMARY_MODERATE_OVERRIDE;
   }
   return {
     score: "weak",
