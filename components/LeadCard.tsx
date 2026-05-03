@@ -1,3 +1,5 @@
+"use client";
+
 import type { Lead } from "@/lib/types";
 import {
   CASH_RANGE_LABELS,
@@ -18,6 +20,11 @@ interface LeadCardProps {
   showAdminDelete?: boolean;
   onAdminDelete?: (lead: Lead) => void;
   deleteDisabled?: boolean;
+  /** Bulk selection (admin dashboard). */
+  showBulkCheckbox?: boolean;
+  bulkChecked?: boolean;
+  onBulkToggle?: (leadId: string, checked: boolean) => void;
+  bulkDisabled?: boolean;
 }
 
 const readinessVariant = {
@@ -46,6 +53,10 @@ export function LeadCard({
   showAdminDelete,
   onAdminDelete,
   deleteDisabled,
+  showBulkCheckbox,
+  bulkChecked,
+  onBulkToggle,
+  bulkDisabled,
 }: LeadCardProps) {
   const { decision } = lead;
   const fullName = `${lead.firstName} ${lead.lastName}`;
@@ -59,6 +70,21 @@ export function LeadCard({
           : "border-surface-200 hover:border-surface-300"
       }`}
     >
+      {showBulkCheckbox ? (
+        <div
+          className="shrink-0 flex items-center px-2 border-r border-surface-200 bg-surface-50"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-surface-300 text-brand focus:ring-brand"
+            checked={!!bulkChecked}
+            disabled={bulkDisabled}
+            onChange={(e) => onBulkToggle?.(lead.id, e.target.checked)}
+            aria-label={`Select ${fullName}`}
+          />
+        </div>
+      ) : null}
       <button
         type="button"
         onClick={onSelect}

@@ -1,3 +1,6 @@
+"use client";
+
+import { useLayoutEffect, useRef } from "react";
 import type { Lead } from "@/lib/types";
 import { LeadCard } from "./LeadCard";
 
@@ -12,6 +15,13 @@ interface LeadFeedProps {
   showAdminDelete?: boolean;
   onAdminDeleteLead?: (lead: Lead) => void;
   deleteDisabled?: boolean;
+  showBulkCheckbox?: boolean;
+  bulkSelectedIds?: string[];
+  onBulkToggle?: (leadId: string, checked: boolean) => void;
+  bulkDisabled?: boolean;
+  allVisibleSelected?: boolean;
+  someVisibleSelected?: boolean;
+  onSelectAllVisible?: () => void;
 }
 
 export function LeadFeed({
@@ -23,14 +33,45 @@ export function LeadFeed({
   showAdminDelete,
   onAdminDeleteLead,
   deleteDisabled,
+  showBulkCheckbox,
+  bulkSelectedIds = [],
+  onBulkToggle,
+  bulkDisabled,
+  allVisibleSelected,
+  someVisibleSelected,
+  onSelectAllVisible,
 }: LeadFeedProps) {
+  const bulkSet = new Set(bulkSelectedIds);
+  const selectAllRef = useRef<HTMLInputElement>(null);
+
+  useLayoutEffect(() => {
+    const el = selectAllRef.current;
+    if (!el) return;
+    el.indeterminate = !!someVisibleSelected && !allVisibleSelected;
+  }, [someVisibleSelected, allVisibleSelected]);
+
   return (
     <div className="flex flex-col h-full bg-surface-50">
       {/* Feed header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-surface-200 bg-white">
-        <h2 className="text-sm font-semibold text-surface-900">
-          Leads ({leads.length})
-        </h2>
+      <div className="flex items-center justify-between gap-3 px-6 py-3 border-b border-surface-200 bg-white flex-wrap">
+        <div className="flex items-center gap-3 min-w-0">
+          <h2 className="text-sm font-semibold text-surface-900 shrink-0">
+            Leads ({leads.length})
+          </h2>
+          {showBulkCheckbox && leads.length > 0 ? (
+            <label className="flex items-center gap-2 text-xs text-surface-700 cursor-pointer select-none">
+              <input
+                ref={selectAllRef}
+                type="checkbox"
+                className="h-4 w-4 rounded border-surface-300 text-brand focus:ring-brand"
+                checked={!!allVisibleSelected}
+                disabled={bulkDisabled}
+                onChange={() => onSelectAllVisible?.()}
+              />
+              <span>Select all visible</span>
+            </label>
+          ) : null}
+        </div>
         <div className="flex items-center gap-2">
           <label className="text-xs text-surface-500">Sort:</label>
           <select
@@ -67,6 +108,10 @@ export function LeadFeed({
               showAdminDelete={showAdminDelete}
               onAdminDelete={onAdminDeleteLead}
               deleteDisabled={deleteDisabled}
+              showBulkCheckbox={showBulkCheckbox}
+              bulkChecked={bulkSet.has(lead.id)}
+              onBulkToggle={onBulkToggle}
+              bulkDisabled={bulkDisabled}
             />
           ))
         )}

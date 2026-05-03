@@ -5,7 +5,7 @@
 
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db/client";
@@ -123,6 +123,80 @@ export async function deleteLead(
   revalidatePath("/realtor");
   revalidatePath("/settings/realtors");
   return { ok: true };
+}
+
+// -----------------------------------------------------------------------------
+// bulkDeleteLeads — admin only; same org scope as deleteLead; FK cascades.
+// -----------------------------------------------------------------------------
+const MAX_BULK_DELETE = 100;
+
+export async function bulkDeleteLeads(
+  leadIds: string[],
+): Promise<
+  { ok: true; deletedCount: number } | { ok: false; error: string }
+> {
+  const auth = await getAuthContext();
+  if (!isAdminRole(auth.role)) {
+    return { ok: false, error: "Only administrators can delete leads." };
+  }
+
+  const unique = [...new Set(leadIds.map((id) => id.trim()).filter(Boolean))];
+  if (unique.length === 0) {
+    return { ok: false, error: "No leads selected." };
+  }
+
+  if (unique.length > MAX_BULK_DELETE) {
+    return {
+      ok: false,
+      error: "You can delete up to 100 leads at a time.",
+    };
+  }
+
+  const uuidSchema = z.string().uuid();
+  const validIds = unique.filter((id) => uuidSchema.safeParse(id).success);
+  if (validIds.length !== unique.length) {
+    return { ok: false, error: "Invalid lead id in selection." };
+  }
+
+  const existing = await db
+    .select({ id: leads.id })
+    .from(leads)
+    .where(
+      and(
+        eq(leads.organizationId, auth.organizationId),
+        inArray(leads.id, validIds),
+      ),
+    );
+
+  if (existing.length !== validIds.length) {
+    return {
+      ok: false,
+      error:
+        "One or more selected leads were not found or are not in your organization.",
+    };
+  }
+
+  const removed = await db
+    .delete(leads)
+    .where(
+      and(
+        eq(leads.organizationId, auth.organizationId),
+        inArray(leads.id, validIds),
+      ),
+    )
+    .returning({ id: leads.id });
+
+  if (removed.length !== validIds.length) {
+    return {
+      ok: false,
+      error: "Could not delete all selected leads. Refresh and try again.",
+    };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/realtor");
+  revalidatePath("/settings/realtors");
+  return { ok: true, deletedCount: removed.length };
 }
 
 // -----------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Lead } from "@/lib/types";
 import { StatsBar } from "@/components/StatsBar";
@@ -8,7 +8,7 @@ import { Sidebar, type FilterState } from "@/components/Sidebar";
 import { LeadFeed } from "@/components/LeadFeed";
 import { DetailPanel } from "@/components/DetailPanel";
 import { TopBar } from "@/components/TopBar";
-import { deleteLead } from "@/app/actions/leads";
+import { bulkDeleteLeads, deleteLead } from "@/app/actions/leads";
 import { downloadLeadsCsv } from "@/lib/export-leads-csv";
 import { isAdminRole, isInternalStaffRole } from "@/lib/auth-roles";
 
@@ -23,6 +23,13 @@ const READINESS_WEIGHT = {
 const DELETE_LEAD_CONFIRM =
   "Are you sure you want to delete this lead? This cannot be undone.";
 
+const BULK_DELETE_CONFIRM =
+  "Are you sure you want to delete the selected leads? This cannot be undone.";
+
+const MAX_BULK_DELETE_LEADS = 100;
+const BULK_DELETE_TOO_MANY_MSG =
+  "You can delete up to 100 leads at a time.";
+
 interface DashboardClientProps {
   initialLeads: Lead[];
   currentUser: { displayName: string; email: string; role: string };
@@ -36,6 +43,7 @@ export function DashboardClient({
   const [isPending, startTransition] = useTransition();
 
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
+  const leadsRef = useRef(leads);
   const [selectedId, setSelectedId] = useState<string | null>(
     initialLeads[0]?.id ?? null,
   );
@@ -51,6 +59,11 @@ export function DashboardClient({
     assignedTo: "ALL",
     search: "",
   });
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    leadsRef.current = leads;
+  }, [leads]);
 
   useEffect(() => {
     setLeads(initialLeads);
@@ -120,6 +133,23 @@ export function DashboardClient({
     });
   }, [leads, filters, sortBy]);
 
+  useEffect(() => {
+    const visible = new Set(visibleLeads.map((l) => l.id));
+    setBulkSelectedIds((prev) => prev.filter((id) => visible.has(id)));
+  }, [visibleLeads]);
+
+  const allVisibleSelected = useMemo(
+    () =>
+      visibleLeads.length > 0 &&
+      visibleLeads.every((l) => bulkSelectedIds.includes(l.id)),
+    [visibleLeads, bulkSelectedIds],
+  );
+
+  const someVisibleSelected = useMemo(
+    () => visibleLeads.some((l) => bulkSelectedIds.includes(l.id)),
+    [visibleLeads, bulkSelectedIds],
+  );
+
   const selectedLead = leads.find((l) => l.id === selectedId) ?? null;
 
   const flashToast = (type: "success" | "error", message: string) => {
@@ -132,6 +162,26 @@ export function DashboardClient({
     flashToast("success", "Export started — check your downloads.");
   };
 
+  const handleBulkToggle = (leadId: string, checked: boolean) => {
+    setBulkSelectedIds((prev) =>
+      checked
+        ? prev.includes(leadId)
+          ? prev
+          : [...prev, leadId]
+        : prev.filter((id) => id !== leadId),
+    );
+  };
+
+  const handleSelectAllVisible = () => {
+    const ids = visibleLeads.map((l) => l.id);
+    if (ids.length === 0) return;
+    setBulkSelectedIds((prev) => {
+      const allOn = ids.every((id) => prev.includes(id));
+      if (allOn) return prev.filter((id) => !ids.includes(id));
+      return [...new Set([...prev, ...ids])];
+    });
+  };
+
   const handleAdminDeleteLead = (lead: Lead) => {
     if (!window.confirm(DELETE_LEAD_CONFIRM)) return;
 
@@ -141,7 +191,40 @@ export function DashboardClient({
         flashToast("error", result.error);
         return;
       }
+      setBulkSelectedIds((prev) => prev.filter((id) => id !== lead.id));
       flashToast("success", "Lead deleted successfully.");
+      router.refresh();
+    });
+  };
+
+  const handleBulkDelete = () => {
+    if (bulkSelectedIds.length === 0) return;
+    if (bulkSelectedIds.length > MAX_BULK_DELETE_LEADS) {
+      flashToast("error", BULK_DELETE_TOO_MANY_MSG);
+      return;
+    }
+    if (!window.confirm(BULK_DELETE_CONFIRM)) return;
+
+    const idsToDelete = [...bulkSelectedIds];
+
+    startTransition(async () => {
+      const result = await bulkDeleteLeads(idsToDelete);
+      if (!result.ok) {
+        flashToast("error", result.error);
+        return;
+      }
+
+      const next = leadsRef.current.filter((l) => !idsToDelete.includes(l.id));
+      setLeads(next);
+      leadsRef.current = next;
+      setBulkSelectedIds([]);
+      setSelectedId((cur) => {
+        if (cur && idsToDelete.includes(cur)) {
+          return next[0]?.id ?? null;
+        }
+        return cur;
+      });
+      flashToast("success", "Selected leads deleted successfully.");
       router.refresh();
     });
   };
@@ -163,7 +246,7 @@ export function DashboardClient({
         </div>
       ) : null}
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         <Sidebar
           filters={filters}
           onChange={setFilters}
@@ -172,18 +255,52 @@ export function DashboardClient({
           filteredCount={visibleLeads.length}
         />
 
-        <main className="flex-1 flex min-w-0">
-          <div className="flex-1 min-w-0">
-            <LeadFeed
-              leads={visibleLeads}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              sortBy={sortBy}
-              onSortChange={setSortBy}
-              showAdminDelete={canDeleteLeads}
-              onAdminDeleteLead={handleAdminDeleteLead}
-              deleteDisabled={isPending}
-            />
+        <main className="flex-1 flex min-w-0 min-h-0">
+          <div className="flex-1 min-w-0 flex flex-col min-h-0">
+            {canDeleteLeads && bulkSelectedIds.length > 0 ? (
+              <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b border-surface-200 bg-red-50/90">
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="text-sm text-surface-800">
+                    {bulkSelectedIds.length} selected
+                  </span>
+                  {bulkSelectedIds.length > MAX_BULK_DELETE_LEADS ? (
+                    <span className="text-sm text-red-800 font-medium">
+                      {BULK_DELETE_TOO_MANY_MSG}
+                    </span>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBulkDelete}
+                  disabled={
+                    isPending ||
+                    bulkSelectedIds.length > MAX_BULK_DELETE_LEADS
+                  }
+                  className="text-sm font-semibold text-white bg-red-700 hover:bg-red-800 rounded-md px-3 py-1.5 disabled:opacity-50"
+                >
+                  Delete selected
+                </button>
+              </div>
+            ) : null}
+            <div className="flex-1 min-h-0 min-w-0">
+              <LeadFeed
+                leads={visibleLeads}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                sortBy={sortBy}
+                onSortChange={setSortBy}
+                showAdminDelete={canDeleteLeads}
+                onAdminDeleteLead={handleAdminDeleteLead}
+                deleteDisabled={isPending}
+                showBulkCheckbox={canDeleteLeads}
+                bulkSelectedIds={bulkSelectedIds}
+                onBulkToggle={handleBulkToggle}
+                bulkDisabled={isPending}
+                allVisibleSelected={allVisibleSelected}
+                someVisibleSelected={someVisibleSelected}
+                onSelectAllVisible={handleSelectAllVisible}
+              />
+            </div>
           </div>
 
           <div className="w-[440px] border-l border-surface-200 shrink-0">
