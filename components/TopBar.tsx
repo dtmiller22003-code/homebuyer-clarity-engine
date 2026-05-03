@@ -49,12 +49,20 @@ export function TopBar({ user }: TopBarProps) {
           Home
         </Link>
         {user.role === "admin" && (
-          <Link
-            href="/settings/branding"
-            className="text-surface-300 hover:text-white"
-          >
-            Settings
-          </Link>
+          <>
+            <Link
+              href="/settings/branding"
+              className="text-surface-300 hover:text-white"
+            >
+              Settings
+            </Link>
+            <Link
+              href="/settings/files"
+              className="text-surface-300 hover:text-white"
+            >
+              Files
+            </Link>
+          </>
         )}
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 bg-brand rounded-full flex items-center justify-center text-xs font-semibold">

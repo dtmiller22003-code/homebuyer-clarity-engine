@@ -15,6 +15,7 @@
 // - leads: referrer_lo_slug (attribution from /apply/[slug])
 // - NEW: realtor_partners (schema only, no UI yet)
 // - NEW: rate_limits (IP-based intake throttling)
+// - NEW: lead_documents (lead file metadata + Supabase Storage pointer)
 // =============================================================================
 
 import {
@@ -224,6 +225,40 @@ export const leads = pgTable(
 );
 
 // -----------------------------------------------------------------------------
+// lead_documents — files attached to a lead (metadata + Supabase Storage path)
+// Upload flow is separate; this table stores the pointer for admin file management.
+// -----------------------------------------------------------------------------
+export const leadDocuments = pgTable(
+  "lead_documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    /** Supabase Storage bucket id (e.g. lead-documents). Null = not stored in our bucket. */
+    storageBucket: text("storage_bucket"),
+    /**
+     * Object key within the bucket (e.g. {orgId}/{leadId}/file.pdf).
+     * When null/empty, delete only removes the DB row (no storage object).
+     */
+    storagePath: text("storage_path"),
+    originalFilename: text("original_filename").notNull(),
+    contentType: text("content_type"),
+    uploadedByUserId: uuid("uploaded_by_user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    orgIdx: index("lead_documents_org_idx").on(table.organizationId),
+    leadIdx: index("lead_documents_lead_idx").on(table.leadId),
+  }),
+);
+
+// -----------------------------------------------------------------------------
 // lead_events — append-only history of actions on a lead
 // -----------------------------------------------------------------------------
 export const leadEvents = pgTable(
@@ -309,5 +344,6 @@ export type LeadRow = typeof leads.$inferSelect;
 export type NewLeadRow = typeof leads.$inferInsert;
 export type TeamMemberRow = typeof teamMembers.$inferSelect;
 export type LeadEventRow = typeof leadEvents.$inferSelect;
+export type LeadDocumentRow = typeof leadDocuments.$inferSelect;
 export type OrganizationRow = typeof organizations.$inferSelect;
 export type RealtorPartnerRow = typeof realtorPartners.$inferSelect;
