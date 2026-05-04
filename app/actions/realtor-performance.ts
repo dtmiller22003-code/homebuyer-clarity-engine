@@ -108,10 +108,9 @@ function rowToAgg(r: {
 }
 
 function historicalRowId(slug: string | null, displayName: string | null): string {
-  const h = createHash("sha1")
-    .update(`realtor|${slug ?? ""}|${displayName ?? ""}`)
-    .digest("hex")
-    .slice(0, 24);
+  const s = slug == null ? "" : String(slug);
+  const n = displayName == null ? "" : String(displayName);
+  const h = createHash("sha1").update(`realtor|${s}|${n}`).digest("hex").slice(0, 24);
   return `hist-${h}`;
 }
 
@@ -133,17 +132,19 @@ export async function getRealtorPartnerPerformanceAdmin(): Promise<{
 
   const orgId = auth.organizationId;
   const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
-  const monthStart = startOfUtcMonth(now);
-  const weekStart = startOfUtcWeek(now);
+  const thirtyDaysAgoIso = new Date(
+    now.getTime() - 30 * 86400000,
+  ).toISOString();
+  const monthStartIso = startOfUtcMonth(now).toISOString();
+  const weekStartIso = startOfUtcWeek(now).toISOString();
 
   const aggByPartner = await db
     .select({
       partnerId: leads.realtorPartnerId,
       totalLeads: sql<number>`count(*)::int`,
-      leadsLast30Days: sql<number>`count(*) filter (where ${leads.createdAt} >= ${thirtyDaysAgo})::int`,
-      leadsThisMonth: sql<number>`count(*) filter (where ${leads.createdAt} >= ${monthStart})::int`,
-      leadsThisWeek: sql<number>`count(*) filter (where ${leads.createdAt} >= ${weekStart})::int`,
+      leadsLast30Days: sql<number>`count(*) filter (where ${leads.createdAt} >= ${thirtyDaysAgoIso})::int`,
+      leadsThisMonth: sql<number>`count(*) filter (where ${leads.createdAt} >= ${monthStartIso})::int`,
+      leadsThisWeek: sql<number>`count(*) filter (where ${leads.createdAt} >= ${weekStartIso})::int`,
       convertedCount: sql<number>`count(*) filter (where ${leads.status} in ('approved', 'sent_to_crm'))::int`,
       lastLeadAt: sql<Date | null>`max(${leads.createdAt})`,
     })
@@ -165,9 +166,9 @@ export async function getRealtorPartnerPerformanceAdmin(): Promise<{
       sourceSlug: leads.sourceSlug,
       sourceDisplayName: leads.sourceDisplayName,
       totalLeads: sql<number>`count(*)::int`,
-      leadsLast30Days: sql<number>`count(*) filter (where ${leads.createdAt} >= ${thirtyDaysAgo})::int`,
-      leadsThisMonth: sql<number>`count(*) filter (where ${leads.createdAt} >= ${monthStart})::int`,
-      leadsThisWeek: sql<number>`count(*) filter (where ${leads.createdAt} >= ${weekStart})::int`,
+      leadsLast30Days: sql<number>`count(*) filter (where ${leads.createdAt} >= ${thirtyDaysAgoIso})::int`,
+      leadsThisMonth: sql<number>`count(*) filter (where ${leads.createdAt} >= ${monthStartIso})::int`,
+      leadsThisWeek: sql<number>`count(*) filter (where ${leads.createdAt} >= ${weekStartIso})::int`,
       convertedCount: sql<number>`count(*) filter (where ${leads.status} in ('approved', 'sent_to_crm'))::int`,
       lastLeadAt: sql<Date | null>`max(${leads.createdAt})`,
     })
