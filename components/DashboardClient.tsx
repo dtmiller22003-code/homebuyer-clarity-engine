@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { Lead } from "@/lib/types";
+import type { Lead, LeadPipelineStatus } from "@/lib/types";
 import { StatsBar } from "@/components/StatsBar";
 import { Sidebar, type FilterState } from "@/components/Sidebar";
 import { LeadFeed } from "@/components/LeadFeed";
 import { DetailPanel } from "@/components/DetailPanel";
 import { TopBar } from "@/components/TopBar";
-import { bulkDeleteLeads, deleteLead } from "@/app/actions/leads";
+import { bulkDeleteLeads, deleteLead, updateLeadStatus } from "@/app/actions/leads";
 import type { RealtorLeaderboardSnapshot } from "@/app/actions/realtor-performance";
 import { downloadLeadsCsv } from "@/lib/export-leads-csv";
 import { isAdminRole, isInternalStaffRole } from "@/lib/auth-roles";
@@ -71,6 +71,7 @@ export function DashboardClient({
     loanPath: "ALL",
     leadSource: "ALL",
     assignedTo: "ALL",
+    pipelineStatus: "ALL",
     search: "",
   });
   const [bulkSelectedIds, setBulkSelectedIds] = useState<string[]>([]);
@@ -118,6 +119,11 @@ export function DashboardClient({
       if (
         filters.assignedTo !== "ALL" &&
         lead.assignedTo !== filters.assignedTo
+      )
+        return false;
+      if (
+        filters.pipelineStatus !== "ALL" &&
+        lead.status !== filters.pipelineStatus
       )
         return false;
       if (filters.search.trim()) {
@@ -174,6 +180,29 @@ export function DashboardClient({
   const handleExportCsv = () => {
     downloadLeadsCsv(visibleLeads, "leads-export.csv");
     flashToast("success", "Export started — check your downloads.");
+  };
+
+  const handlePipelineChange = (leadId: string, status: LeadPipelineStatus) => {
+    const prev = leads.find((l) => l.id === leadId)?.status;
+    setLeads((ls) =>
+      ls.map((l) => (l.id === leadId ? { ...l, status } : l)),
+    );
+    startTransition(async () => {
+      const res = await updateLeadStatus({ leadId, status });
+      if (!res.ok) {
+        setLeads((ls) =>
+          ls.map((l) =>
+            l.id === leadId ? { ...l, status: prev ?? "new" } : l,
+          ),
+        );
+        flashToast("error", res.error);
+        return;
+      }
+      setLeads((ls) =>
+        ls.map((l) => (l.id === leadId ? res.lead : l)),
+      );
+      flashToast("success", "Status updated");
+    });
   };
 
   const handleBulkToggle = (leadId: string, checked: boolean) => {
@@ -338,12 +367,18 @@ export function DashboardClient({
                 someVisibleSelected={someVisibleSelected}
                 onSelectAllVisible={handleSelectAllVisible}
                 showIntakeSource={isInternalStaffRole(currentUser.role)}
+                showPipelineEditor={isInternalStaffRole(currentUser.role)}
+                onPipelineChange={handlePipelineChange}
               />
             </div>
           </div>
 
           <div className="w-[440px] border-l border-surface-200 shrink-0">
-            <DetailPanel lead={selectedLead} />
+            <DetailPanel
+              lead={selectedLead}
+              canEditPipeline={isInternalStaffRole(currentUser.role)}
+              onPipelineChange={handlePipelineChange}
+            />
           </div>
         </main>
       </div>

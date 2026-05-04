@@ -84,14 +84,6 @@ export const leadSourceEnum = pgEnum("lead_source", [
   "OTHER",
 ]);
 
-export const leadStatusEnum = pgEnum("lead_status", [
-  "new",
-  "reviewed",
-  "approved",
-  "archived",
-  "sent_to_crm",
-]);
-
 // Phase 2B
 export const fontPresetEnum = pgEnum("font_preset", [
   "SYSTEM",
@@ -304,7 +296,8 @@ export const leads = pgTable(
     targetPurchasePrice: integer("target_purchase_price"),
 
     notes: text("notes"),
-    status: leadStatusEnum("status").notNull().default("new"),
+    /** Sales pipeline: new → contacted → … → closed / dead (text, not enum). */
+    status: text("status").notNull().default("new"),
 
     // Cached computed decision
     decision: jsonb("decision").$type<LeadDecision>().notNull(),

@@ -9,10 +9,14 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { normalizeExternalApplicationUrl } from "@/lib/default-application-url";
+import {
+  normalizeExternalApplicationUrl,
+  resolveApplicationRedirectUrl,
+} from "@/lib/default-application-url";
 import { slugifyPublicProfile } from "@/lib/slugify";
 import { organizations, teamMembers } from "@/db/schema";
 import { getAuthContext } from "@/lib/supabase/auth";
+import { sendLoanOfficerWelcomeEmail } from "@/lib/email/welcome-email.server";
 import { ensureAuthUserForEmail } from "@/lib/supabase/provision-auth-user";
 
 const hexColor = z
@@ -411,6 +415,16 @@ export async function provisionLoanOfficer(
   revalidatePath("/settings/team");
   revalidatePath("/apply");
   revalidatePath("/apply/lo");
+
+  const resolvedApplicationUrl =
+    resolveApplicationRedirectUrl(applicationLink);
+  void sendLoanOfficerWelcomeEmail({
+    to: parsed.data.email.trim(),
+    displayName: parsed.data.displayName.trim(),
+    loSlug: slug,
+    applicationLink: resolvedApplicationUrl,
+  });
+
   return { ok: true, invitationSent: provisioned.invitationSent };
 }
 

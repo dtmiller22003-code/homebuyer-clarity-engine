@@ -145,7 +145,7 @@ export async function getRealtorPartnerPerformanceAdmin(): Promise<{
       leadsLast30Days: sql<number>`count(*) filter (where ${leads.createdAt} >= ${thirtyDaysAgoIso})::int`,
       leadsThisMonth: sql<number>`count(*) filter (where ${leads.createdAt} >= ${monthStartIso})::int`,
       leadsThisWeek: sql<number>`count(*) filter (where ${leads.createdAt} >= ${weekStartIso})::int`,
-      convertedCount: sql<number>`count(*) filter (where ${leads.status} in ('approved', 'sent_to_crm'))::int`,
+      convertedCount: sql<number>`count(*) filter (where ${leads.status} in ('closed', 'preapproved'))::int`,
       lastLeadAt: sql<Date | null>`max(${leads.createdAt})`,
     })
     .from(leads)
@@ -169,7 +169,7 @@ export async function getRealtorPartnerPerformanceAdmin(): Promise<{
       leadsLast30Days: sql<number>`count(*) filter (where ${leads.createdAt} >= ${thirtyDaysAgoIso})::int`,
       leadsThisMonth: sql<number>`count(*) filter (where ${leads.createdAt} >= ${monthStartIso})::int`,
       leadsThisWeek: sql<number>`count(*) filter (where ${leads.createdAt} >= ${weekStartIso})::int`,
-      convertedCount: sql<number>`count(*) filter (where ${leads.status} in ('approved', 'sent_to_crm'))::int`,
+      convertedCount: sql<number>`count(*) filter (where ${leads.status} in ('closed', 'preapproved'))::int`,
       lastLeadAt: sql<Date | null>`max(${leads.createdAt})`,
     })
     .from(leads)
@@ -275,7 +275,13 @@ export async function getRealtorPartnerPerformanceAdmin(): Promise<{
 
   rows.sort((x, y) => x.displayName.localeCompare(y.displayName));
 
-  const withLeadsMonth = rows
+  /** Leaderboards: active partners only (clean default; full rows still returned for settings). */
+  const livePartnerRows = rows.filter(
+    (r) =>
+      r.rowKind !== "historical" && r.isActive && !r.deletedAt,
+  );
+
+  const withLeadsMonth = livePartnerRows
     .filter((r) => r.leadsThisMonth > 0)
     .sort((a, b) => b.leadsThisMonth - a.leadsThisMonth)
     .slice(0, 5)
@@ -285,7 +291,7 @@ export async function getRealtorPartnerPerformanceAdmin(): Promise<{
       leadCount: r.leadsThisMonth,
     }));
 
-  const withConversion = rows
+  const withConversion = livePartnerRows
     .filter((r) => r.leadCount > 0 && r.conversionRatePercent !== null)
     .sort((a, b) => {
       const av = a.conversionRatePercent ?? 0;

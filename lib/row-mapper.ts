@@ -6,6 +6,7 @@
 import type { Lead, LeadAttributionSource, LeadInputs } from "./types";
 import type { LeadRow, NewLeadRow } from "@/db/schema";
 import { evaluateLead } from "./decision-engine";
+import { normalizeLeadPipelineStatus } from "./lead-pipeline";
 
 // DB → Domain
 export function rowToLead(row: LeadRow): Lead {
@@ -32,7 +33,7 @@ export function rowToLead(row: LeadRow): Lead {
       row.heavyWriteOffs === null ? undefined : row.heavyWriteOffs === "true",
     targetPurchasePrice: row.targetPurchasePrice ?? undefined,
     notes: row.notes ?? undefined,
-    status: row.status,
+    status: normalizeLeadPipelineStatus(String(row.status)),
     realtorPartnerId: row.realtorPartnerId ?? null,
     sourceType: (row.sourceType as LeadAttributionSource | undefined) ?? "company",
     sourceSlug: row.sourceSlug ?? null,

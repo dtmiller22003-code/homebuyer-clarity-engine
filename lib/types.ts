@@ -53,12 +53,18 @@ export type LeadSource =
   | "OPEN_HOUSE"
   | "OTHER";
 
-export type LeadStatus =
+/** Sales / ops pipeline stage stored on `leads.status` (text in DB). */
+export type LeadPipelineStatus =
   | "new"
-  | "reviewed"
-  | "approved"
-  | "archived"
-  | "sent_to_crm";
+  | "contacted"
+  | "prequalified"
+  | "preapproved"
+  | "under_contract"
+  | "closed"
+  | "dead";
+
+/** @deprecated Use LeadPipelineStatus — alias kept for gradual refactors */
+export type LeadStatus = LeadPipelineStatus;
 
 /** How the lead was attributed at intake (public links vs company default). */
 export type LeadAttributionSource = "company" | "realtor" | "loan_officer";
@@ -95,7 +101,7 @@ export interface LeadInputs {
   // --- end buyer-provided fields ---
 
   notes?: string;
-  status: LeadStatus;
+  status: LeadPipelineStatus;
 
   /** Present when the lead came in via a realtor partner link. */
   realtorPartnerId?: string | null;

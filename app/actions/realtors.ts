@@ -9,6 +9,7 @@ import { normalizeExternalApplicationUrl } from "@/lib/default-application-url";
 import { isAdminRole, isRealtorPartnerRole } from "@/lib/auth-roles";
 import { getAuthContext } from "@/lib/supabase/auth";
 import { slugifyPublicProfile } from "@/lib/slugify";
+import { sendRealtorPartnerWelcomeEmail } from "@/lib/email/welcome-email.server";
 import { ensureAuthUserForEmail } from "@/lib/supabase/provision-auth-user";
 import { getRealtorPartnerPerformanceAdmin } from "@/app/actions/realtor-performance";
 
@@ -210,6 +211,13 @@ export async function createRealtorPartner(
     revalidatePath("/settings/realtors");
     revalidatePath("/settings/team");
     revalidatePath("/realtor");
+
+    void sendRealtorPartnerWelcomeEmail({
+      to: parsed.data.email.trim(),
+      displayName: parsed.data.displayName,
+      partnerSlug: row.slug,
+    });
+
     return {
       ok: true,
       id: row.id,

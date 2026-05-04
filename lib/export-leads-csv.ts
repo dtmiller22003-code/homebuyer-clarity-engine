@@ -3,6 +3,7 @@ import {
   LEAD_SOURCE_LABELS,
   READINESS_LABELS,
 } from "@/lib/types";
+import { LEAD_PIPELINE_LABELS } from "@/lib/lead-pipeline";
 
 function escapeCsvCell(value: string): string {
   if (/[",\n\r]/.test(value)) {
@@ -34,7 +35,7 @@ export function buildLeadsCsv(leads: Lead[]): string {
       l.lastName,
       l.email,
       l.phone,
-      l.status,
+      LEAD_PIPELINE_LABELS[l.status] ?? l.status,
       READINESS_LABELS[l.decision.readiness],
       l.decision.loanPath,
       LEAD_SOURCE_LABELS[l.leadSource],

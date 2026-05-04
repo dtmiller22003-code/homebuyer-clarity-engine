@@ -21,6 +21,29 @@ function isPartnerLive(p: RealtorPerformanceAdminRow): boolean {
   return p.isActive && !p.deletedAt;
 }
 
+/** Active, non-deleted partner row (excludes synthetic historical buckets). */
+function isActivePartnerRow(p: RealtorPerformanceAdminRow): boolean {
+  if (p.rowKind === "historical") return false;
+  return isPartnerLive(p);
+}
+
+/** Soft-removed (deleted_at) vs deactivated only. */
+function partnerRemovedBadge(p: RealtorPerformanceAdminRow): boolean {
+  return !!p.deletedAt;
+}
+
+function partnerInactiveBadge(p: RealtorPerformanceAdminRow): boolean {
+  return !p.isActive && !p.deletedAt;
+}
+
+/** Sort: live partners first, then inactive, then removed, then historical. */
+function statusRank(p: RealtorPerformanceAdminRow): number {
+  if (p.rowKind === "historical") return 3;
+  if (p.deletedAt) return 2;
+  if (!p.isActive) return 1;
+  return 0;
+}
+
 function isTopPerformer(r: RealtorPerformanceAdminRow): boolean {
   if (r.rowKind === "historical") return false;
   if (r.deletedAt) return false;
@@ -57,6 +80,8 @@ export function RealtorsAdminClient({
   const [partners, setPartners] = useState(initialRows);
   const [sortKey, setSortKey] = useState<SortKey>("total");
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
+  /** When false, list + table show only active, non-deleted partners (default admin view). */
+  const [showInactiveRemoved, setShowInactiveRemoved] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -77,9 +102,18 @@ export function RealtorsAdminClient({
 
   const displayPartners = useMemo(() => {
     let list = [...partners];
-    if (filterMode === "active") list = list.filter((p) => isPartnerLive(p));
+    if (!showInactiveRemoved) {
+      list = list.filter((p) => isActivePartnerRow(p));
+    }
+    if (filterMode === "active") {
+      list = list.filter(
+        (p) => p.rowKind !== "historical" && isPartnerLive(p),
+      );
+    }
     if (filterMode === "top") list = list.filter(isTopPerformer);
     list.sort((a, b) => {
+      const sr = statusRank(a) - statusRank(b);
+      if (sr !== 0) return sr;
       if (sortKey === "total") {
         if (b.leadCount !== a.leadCount) return b.leadCount - a.leadCount;
         return a.displayName.localeCompare(b.displayName);
@@ -99,7 +133,7 @@ export function RealtorsAdminClient({
       return a.displayName.localeCompare(b.displayName);
     });
     return list;
-  }, [partners, filterMode, sortKey]);
+  }, [partners, filterMode, sortKey, showInactiveRemoved]);
 
   const origin = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -305,7 +339,9 @@ export function RealtorsAdminClient({
         </h2>
         <p className="text-xs text-surface-600">
           Admin-only metrics from leads attributed to each partner. Converted =
-          approved or sent to CRM.
+          closed or preapproved pipeline stages. Rankings include{" "}
+          <strong className="font-medium text-surface-800">active partners only</strong>
+          so removed or inactive profiles do not crowd the snapshot.
         </p>
         <RealtorPerformanceLeaderboards
           data={leaderboards}
@@ -314,6 +350,27 @@ export function RealtorsAdminClient({
       </div>
 
       <div className="space-y-3">
+        <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-surface-200 bg-white px-3 py-3 shadow-sm">
+          <input
+            type="checkbox"
+            id="show-inactive-removed-partners"
+            checked={showInactiveRemoved}
+            onChange={(e) => setShowInactiveRemoved(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-surface-300 text-brand focus:ring-brand"
+          />
+          <span className="min-w-0">
+            <span className="text-sm font-medium text-surface-900">
+              Show inactive / removed partners
+            </span>
+            <span className="mt-1 block text-xs text-surface-600 leading-relaxed">
+              Off by default: the lists below only show active partners. Turn this on
+              to review deactivated or soft-deleted partners and historical lead
+              buckets (saved slug / display name on leads). Leads are never deleted
+              and attribution is preserved.
+            </span>
+          </span>
+        </label>
+
         <div className="flex flex-wrap items-end justify-between gap-3">
           <h2 className="text-sm font-semibold text-surface-900">
             Partner performance
@@ -339,7 +396,7 @@ export function RealtorsAdminClient({
                   : "border-surface-300 bg-white text-surface-700 hover:bg-surface-50"
               }`}
             >
-              All
+              All in view
             </button>
             <button
               type="button"
@@ -392,7 +449,9 @@ export function RealtorsAdminClient({
                     colSpan={7}
                     className="px-3 py-8 text-center text-surface-500"
                   >
-                    No partners match this filter.
+                    {!showInactiveRemoved
+                      ? "No active partners yet. Use “Show inactive / removed partners” above to review history or soft-deleted rows."
+                      : "No partners match this filter."}
                   </td>
                 </tr>
               ) : (
@@ -420,14 +479,20 @@ export function RealtorsAdminClient({
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       {p.rowKind === "historical" ? (
-                        <span className="text-surface-700 font-medium">Historical</span>
-                      ) : p.deletedAt ? (
-                        <span className="text-amber-900 font-medium">Removed</span>
-                      ) : p.isActive ? (
-                        <span className="text-emerald-800 font-medium">Active</span>
-                      ) : (
-                        <span className="text-surface-500 font-medium">
+                        <span className="inline-flex rounded-full bg-violet-100 text-violet-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                          Historical
+                        </span>
+                      ) : partnerRemovedBadge(p) ? (
+                        <span className="inline-flex rounded-full bg-amber-100 text-amber-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                          Removed
+                        </span>
+                      ) : partnerInactiveBadge(p) ? (
+                        <span className="inline-flex rounded-full bg-surface-200 text-surface-700 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
                           Inactive
+                        </span>
+                      ) : (
+                        <span className="inline-flex rounded-full bg-emerald-100 text-emerald-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                          Active
                         </span>
                       )}
                     </td>
@@ -440,9 +505,20 @@ export function RealtorsAdminClient({
       </div>
 
       <div>
-        <h2 className="text-sm font-semibold text-surface-900 mb-3">
+        <h2 className="text-sm font-semibold text-surface-900">
           Partners & links
         </h2>
+        {!showInactiveRemoved ? (
+          <p className="text-xs text-surface-600 mt-1 mb-3">
+            Showing active partners only. Use the checkbox above to include inactive,
+            removed, and historical attribution rows.
+          </p>
+        ) : (
+          <p className="text-xs text-surface-600 mt-1 mb-3">
+            Showing all partner records and historical buckets. Live partners are
+            listed first.
+          </p>
+        )}
         <ul className="space-y-3">
           {displayPartners.map((p) => {
             const publicLeadLink = `${origin}/apply/realtor/${encodeURIComponent(p.slug)}`;
@@ -455,14 +531,14 @@ export function RealtorsAdminClient({
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="font-medium text-surface-900">{p.displayName}</div>
                   {p.rowKind === "historical" ? (
-                    <span className="inline-flex items-center rounded-full bg-surface-200 text-surface-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                    <span className="inline-flex items-center rounded-full bg-violet-100 text-violet-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
                       Historical
                     </span>
-                  ) : p.deletedAt ? (
+                  ) : partnerRemovedBadge(p) ? (
                     <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
                       Removed
                     </span>
-                  ) : !p.isActive ? (
+                  ) : partnerInactiveBadge(p) ? (
                     <span className="inline-flex items-center rounded-full bg-surface-200 text-surface-700 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
                       Inactive
                     </span>

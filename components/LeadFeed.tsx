@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef } from "react";
-import type { Lead } from "@/lib/types";
+import type { Lead, LeadPipelineStatus } from "@/lib/types";
 import { LeadCard } from "./LeadCard";
 
 type SortOption = "newest" | "oldest" | "readiness";
@@ -24,6 +24,8 @@ interface LeadFeedProps {
   onSelectAllVisible?: () => void;
   /** Staff dashboard — show intake attribution (realtor / LO / company). */
   showIntakeSource?: boolean;
+  showPipelineEditor?: boolean;
+  onPipelineChange?: (leadId: string, status: LeadPipelineStatus) => void;
 }
 
 export function LeadFeed({
@@ -43,6 +45,8 @@ export function LeadFeed({
   someVisibleSelected,
   onSelectAllVisible,
   showIntakeSource,
+  showPipelineEditor,
+  onPipelineChange,
 }: LeadFeedProps) {
   const bulkSet = new Set(bulkSelectedIds);
   const selectAllRef = useRef<HTMLInputElement>(null);
@@ -116,6 +120,8 @@ export function LeadFeed({
               onBulkToggle={onBulkToggle}
               bulkDisabled={bulkDisabled}
               showIntakeSource={showIntakeSource}
+              showPipelineEditor={showPipelineEditor}
+              onPipelineChange={onPipelineChange}
             />
           ))
         )}

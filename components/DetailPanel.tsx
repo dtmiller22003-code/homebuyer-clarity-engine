@@ -1,4 +1,4 @@
-import type { Lead, PillarAnalysis, Recommendation } from "@/lib/types";
+import type { Lead, LeadPipelineStatus, PillarAnalysis, Recommendation } from "@/lib/types";
 import {
   CASH_RANGE_LABELS,
   CREDIT_RANGE_LABELS,
@@ -9,10 +9,13 @@ import {
   READINESS_LABELS,
 } from "@/lib/types";
 import { Badge } from "./Badge";
+import { LeadPipelineBadge, LeadPipelineStatusSelect } from "./LeadPipelineUi";
 import { PillarScore } from "./PillarScore";
 
 interface DetailPanelProps {
   lead: Lead | null;
+  canEditPipeline?: boolean;
+  onPipelineChange?: (leadId: string, status: LeadPipelineStatus) => void;
 }
 
 const readinessVariant = {
@@ -21,7 +24,11 @@ const readinessVariant = {
   NOT_READY_YET: "weak" as const,
 };
 
-export function DetailPanel({ lead }: DetailPanelProps) {
+export function DetailPanel({
+  lead,
+  canEditPipeline = false,
+  onPipelineChange,
+}: DetailPanelProps) {
   if (!lead) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-white text-center p-8">
@@ -84,6 +91,18 @@ export function DetailPanel({ lead }: DetailPanelProps) {
                 </Badge>
               )}
             </div>
+          </div>
+
+          <div className="mt-3 pt-3 border-t border-surface-100 flex flex-wrap items-center gap-3">
+            <LeadPipelineBadge status={lead.status} />
+            {canEditPipeline && onPipelineChange ? (
+              <LeadPipelineStatusSelect
+                leadId={lead.id}
+                value={lead.status}
+                onChange={onPipelineChange}
+                variant="compact"
+              />
+            ) : null}
           </div>
 
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mt-3">

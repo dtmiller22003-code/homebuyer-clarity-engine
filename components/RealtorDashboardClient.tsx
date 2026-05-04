@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Lead } from "@/lib/types";
 import { READINESS_LABELS } from "@/lib/types";
 import { LeadLinkShareCard } from "@/components/LeadLinkShareCard";
+import { LeadPipelineBadge } from "@/components/LeadPipelineUi";
 import { TopBar } from "@/components/TopBar";
 
 interface RealtorDashboardClientProps {
@@ -82,7 +83,7 @@ export function RealtorDashboardClient({
                   <th className="px-4 py-3">Name</th>
                   <th className="px-4 py-3">Email</th>
                   <th className="px-4 py-3">Phone</th>
-                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Lead status</th>
                   <th className="px-4 py-3">Readiness</th>
                 </tr>
               </thead>
@@ -94,7 +95,9 @@ export function RealtorDashboardClient({
                     </td>
                     <td className="px-4 py-3 text-surface-700">{l.email}</td>
                     <td className="px-4 py-3 text-surface-700">{l.phone}</td>
-                    <td className="px-4 py-3 text-surface-700">{l.status}</td>
+                    <td className="px-4 py-3">
+                      <LeadPipelineBadge status={l.status} />
+                    </td>
                     <td className="px-4 py-3 text-surface-700">
                       {READINESS_LABELS[l.decision.readiness]}
                     </td>

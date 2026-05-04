@@ -1,6 +1,6 @@
 "use client";
 
-import type { Lead } from "@/lib/types";
+import type { Lead, LeadPipelineStatus } from "@/lib/types";
 import {
   CASH_RANGE_LABELS,
   CREDIT_RANGE_LABELS,
@@ -10,6 +10,7 @@ import {
   READINESS_LABELS,
 } from "@/lib/types";
 import { Badge } from "./Badge";
+import { LeadPipelineBadge, LeadPipelineStatusSelect } from "./LeadPipelineUi";
 import { PillarScore } from "./PillarScore";
 
 interface LeadCardProps {
@@ -26,6 +27,9 @@ interface LeadCardProps {
   onBulkToggle?: (leadId: string, checked: boolean) => void;
   bulkDisabled?: boolean;
   showIntakeSource?: boolean;
+  /** Admin / loan officer — pipeline dropdown */
+  showPipelineEditor?: boolean;
+  onPipelineChange?: (leadId: string, status: LeadPipelineStatus) => void;
 }
 
 const readinessVariant = {
@@ -59,6 +63,8 @@ export function LeadCard({
   onBulkToggle,
   bulkDisabled,
   showIntakeSource,
+  showPipelineEditor,
+  onPipelineChange,
 }: LeadCardProps) {
   const { decision } = lead;
   const fullName = `${lead.firstName} ${lead.lastName}`;
@@ -112,7 +118,8 @@ export function LeadCard({
             ) : null}
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          <LeadPipelineBadge status={lead.status} />
           <Badge variant={readinessVariant[decision.readiness]}>
             {READINESS_LABELS[decision.readiness]}
           </Badge>
@@ -126,6 +133,20 @@ export function LeadCard({
           )}
         </div>
       </div>
+
+      {showPipelineEditor && onPipelineChange ? (
+        <div
+          className="mb-3 flex flex-wrap items-center justify-between gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <LeadPipelineStatusSelect
+            leadId={lead.id}
+            value={lead.status}
+            onChange={onPipelineChange}
+            variant="block"
+          />
+        </div>
+      ) : null}
 
       {/* Inputs grid */}
       <div className="grid grid-cols-4 gap-2 mb-3 text-xs">

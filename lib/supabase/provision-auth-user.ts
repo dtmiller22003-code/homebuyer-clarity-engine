@@ -6,17 +6,8 @@
 import "server-only";
 
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import { getPublicSiteOrigin } from "@/lib/site-url";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
-
-function siteOrigin(): string | undefined {
-  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (explicit) return explicit.replace(/\/$/, "");
-  const v = process.env.VERCEL_URL?.trim();
-  if (v) {
-    return v.startsWith("http") ? v.replace(/\/$/, "") : `https://${v}`;
-  }
-  return undefined;
-}
 
 async function findAuthUserByEmail(
   admin: SupabaseClient,
@@ -68,7 +59,7 @@ export async function ensureAuthUserForEmail(options: {
     return { ok: true, userId: existing.id, invitationSent: false };
   }
 
-  const origin = siteOrigin();
+  const origin = getPublicSiteOrigin() ?? undefined;
   const redirectTo = origin ? `${origin}/login` : undefined;
 
   const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {

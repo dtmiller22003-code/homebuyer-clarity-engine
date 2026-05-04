@@ -19,7 +19,11 @@ import { getAuthContext } from "@/lib/supabase/auth";
 import { evaluateLead } from "@/lib/decision-engine";
 import { enrichLeadsWithIntakeSource } from "@/lib/enrich-lead-intake-source";
 import { rowToLead } from "@/lib/row-mapper";
-import type { Lead, LeadStatus } from "@/lib/types";
+import type { Lead, LeadPipelineStatus } from "@/lib/types";
+import {
+  LEAD_PIPELINE_STATUSES,
+  normalizeLeadPipelineStatus,
+} from "@/lib/lead-pipeline";
 
 // -----------------------------------------------------------------------------
 // listLeads — used by the dashboard page (server component) to fetch leads
@@ -48,24 +52,46 @@ export async function listLeads(): Promise<Lead[]> {
 }
 
 // -----------------------------------------------------------------------------
-// updateLeadStatus — approve / archive / send_to_crm
+// updateLeadStatus — pipeline stage (new → closed / dead)
 // -----------------------------------------------------------------------------
-const statusUpdateSchema = z.object({
+const pipelineStatusSchema = z.object({
   leadId: z.string().uuid(),
-  status: z.enum(["new", "reviewed", "approved", "archived", "sent_to_crm"]),
+  status: z
+    .string()
+    .refine(
+      (s): s is LeadPipelineStatus =>
+        (LEAD_PIPELINE_STATUSES as readonly string[]).includes(s),
+      "Invalid pipeline status",
+    ),
 });
 
 export async function updateLeadStatus(input: {
   leadId: string;
-  status: LeadStatus;
+  status: LeadPipelineStatus;
 }) {
   const auth = await getAuthContext();
   if (!isInternalStaffRole(auth.role)) {
     return { ok: false as const, error: "Access denied" };
   }
-  const parsed = statusUpdateSchema.parse(input);
+  const parsed = pipelineStatusSchema.parse(input);
 
-  // Update only if the lead belongs to the same org
+  const [before] = await db
+    .select({ status: leads.status })
+    .from(leads)
+    .where(
+      and(
+        eq(leads.id, parsed.leadId),
+        eq(leads.organizationId, auth.organizationId),
+      ),
+    )
+    .limit(1);
+
+  if (!before) {
+    return { ok: false as const, error: "Lead not found or access denied" };
+  }
+
+  const previousStatus = before.status;
+
   const [updated] = await db
     .update(leads)
     .set({
@@ -84,16 +110,16 @@ export async function updateLeadStatus(input: {
     return { ok: false as const, error: "Lead not found or access denied" };
   }
 
-  // Record event
   await db.insert(leadEvents).values({
     leadId: parsed.leadId,
     actorUserId: auth.userId,
     actorName: auth.displayName,
-    eventType: `status_${parsed.status}`,
-    metadata: { previousStatus: updated.status },
+    eventType: "pipeline_status",
+    metadata: { previousStatus, newStatus: parsed.status },
   });
 
   revalidatePath("/");
+  revalidatePath("/realtor");
   const [enriched] = await enrichLeadsWithIntakeSource(auth.organizationId, [
     updated,
   ]);
@@ -271,7 +297,7 @@ export async function updateLeadInputs(input: z.infer<typeof leadInputsSchema>) 
     lastUpdated: new Date().toISOString(),
     createdBy: existing.createdBy,
     leadSource: existing.leadSource,
-    status: existing.status,
+    status: normalizeLeadPipelineStatus(String(existing.status)),
     ...parsed,
   });
 

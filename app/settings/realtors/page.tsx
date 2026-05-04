@@ -17,6 +17,11 @@ export default async function RealtorsSettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold text-surface-900">Realtor partners</h1>
         <p className="text-sm text-surface-600 mt-1">
+          The partner list defaults to active partners only; use{" "}
+          <strong className="font-medium text-surface-800">
+            Show inactive / removed partners
+          </strong>{" "}
+          to audit soft-deleted or deactivated profiles and historical lead buckets.
           Create a partner to add their record, send a Supabase invite to their
           email, and attach their{" "}
           <code className="text-xs bg-surface-100 px-1 rounded">realtor_partner</code>{" "}
