@@ -58,7 +58,9 @@ export async function middleware(request: NextRequest) {
   if (user && pathname === "/login") {
     const err = request.nextUrl.searchParams.get("error");
     const stayOnLogin =
-      err === "realtor_inactive" || err === "not_provisioned";
+      err === "realtor_inactive" ||
+      err === "not_provisioned" ||
+      err === "auth_callback";
     if (!stayOnLogin) {
       const url = request.nextUrl.clone();
       url.pathname = "/";

@@ -1,10 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 function errorMessageForParam(code: string | null): string | null {
+  if (code === "auth_callback") {
+    return "Sign-in link expired or is invalid. Try again from your email or use Forgot password.";
+  }
   if (code === "not_provisioned") {
     return "Your account isn't provisioned yet. Contact your admin.";
   }
@@ -46,6 +50,13 @@ export function LoginForm() {
   const [info, setInfo] = useState<string | null>(
     messageForParam(initialMessage),
   );
+
+  useEffect(() => {
+    const forgot = searchParams.get("forgot");
+    if (forgot === "1" || forgot === "true") {
+      setMode("forgot");
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (searchParams.get("error") === "realtor_inactive") {
@@ -199,17 +210,18 @@ export function LoginForm() {
               </form>
 
               <div className="mt-4 text-center">
-                <button
-                  type="button"
+                <Link
+                  href="/login?forgot=1"
+                  scroll={false}
+                  className="text-xs font-medium text-brand hover:underline"
                   onClick={() => {
                     setMode("forgot");
                     setError(null);
                     setInfo(null);
                   }}
-                  className="text-xs font-medium text-brand hover:underline"
                 >
                   Forgot password?
-                </button>
+                </Link>
               </div>
             </>
           ) : (
@@ -262,17 +274,18 @@ export function LoginForm() {
               </form>
 
               <div className="mt-4 text-center">
-                <button
-                  type="button"
+                <Link
+                  href="/login"
+                  scroll={false}
+                  className="text-xs font-medium text-surface-600 hover:text-surface-900 hover:underline"
                   onClick={() => {
                     setMode("signin");
                     setError(null);
                     setInfo(null);
                   }}
-                  className="text-xs font-medium text-surface-600 hover:text-surface-900 hover:underline"
                 >
                   Back to sign in
-                </button>
+                </Link>
               </div>
             </>
           )}
