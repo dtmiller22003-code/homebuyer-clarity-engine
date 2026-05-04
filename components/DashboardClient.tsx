@@ -12,6 +12,7 @@ import { bulkDeleteLeads, deleteLead } from "@/app/actions/leads";
 import type { RealtorLeaderboardSnapshot } from "@/app/actions/realtor-performance";
 import { downloadLeadsCsv } from "@/lib/export-leads-csv";
 import { isAdminRole, isInternalStaffRole } from "@/lib/auth-roles";
+import { LeadLinkShareCard } from "@/components/LeadLinkShareCard";
 import { RealtorPerformanceLeaderboards } from "@/components/RealtorPerformanceLeaderboards";
 
 type SortOption = "newest" | "oldest" | "readiness";
@@ -37,12 +38,20 @@ interface DashboardClientProps {
   currentUser: { displayName: string; email: string; role: string };
   /** Admin-only; omitted or null for loan officers. */
   realtorLeaderboards?: RealtorLeaderboardSnapshot | null;
+  /**
+   * Loan officer only: full `/apply/lo/{slug}` URL, or null if slug/site URL
+   * missing. Omit entirely for admins.
+   */
+  loanOfficerApplyLinkUrl?: string | null;
+  loanOfficerApplyLinkUnavailableHint?: string;
 }
 
 export function DashboardClient({
   initialLeads,
   currentUser,
   realtorLeaderboards = null,
+  loanOfficerApplyLinkUrl,
+  loanOfficerApplyLinkUnavailableHint = "Ask your admin to set your public link slug in team settings.",
 }: DashboardClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -238,6 +247,19 @@ export function DashboardClient({
     <div className="h-screen flex flex-col bg-surface-50">
       <TopBar user={currentUser} />
       <StatsBar leads={leads} />
+
+      {loanOfficerApplyLinkUrl !== undefined ? (
+        <div className="shrink-0 px-6 py-3 bg-white border-b border-surface-200">
+          <LeadLinkShareCard
+            title="My Lead Link"
+            helperText="Use this link to track all of your leads."
+            linkUrl={loanOfficerApplyLinkUrl}
+            unavailableHint={loanOfficerApplyLinkUnavailableHint}
+            onToast={flashToast}
+            className="mb-0"
+          />
+        </div>
+      ) : null}
 
       {realtorLeaderboards &&
       (realtorLeaderboards.topThisMonth.length > 0 ||

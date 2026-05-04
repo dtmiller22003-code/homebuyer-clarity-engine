@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import type { Lead } from "@/lib/types";
 import { READINESS_LABELS } from "@/lib/types";
+import { LeadLinkShareCard } from "@/components/LeadLinkShareCard";
 import { TopBar } from "@/components/TopBar";
 
 interface RealtorDashboardClientProps {
@@ -11,19 +13,42 @@ interface RealtorDashboardClientProps {
     personalLogoUrl: string | null;
     subtitle: string | null;
   } | null;
+  /** Full apply URL for this partner only; null if origin or slug missing */
+  partnerLeadLink: string | null;
+  partnerLeadLinkUnavailableHint: string;
   currentUser: { displayName: string; email: string; role: string };
 }
 
 export function RealtorDashboardClient({
   leads,
   partnerBranding,
+  partnerLeadLink,
+  partnerLeadLinkUnavailableHint,
   currentUser,
 }: RealtorDashboardClientProps) {
+  const [toast, setToast] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+
+  const flashToast = (type: "success" | "error", message: string) => {
+    setToast({ type, message });
+    window.setTimeout(() => setToast(null), 4000);
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-surface-50">
       <TopBar user={currentUser} />
 
       <div className="p-6 max-w-4xl mx-auto w-full">
+        <LeadLinkShareCard
+          title="My Lead Link"
+          helperText="Share this link with buyers. All submissions will be tracked to you."
+          linkUrl={partnerLeadLink}
+          unavailableHint={partnerLeadLinkUnavailableHint}
+          onToast={flashToast}
+        />
+
         {partnerBranding?.personalLogoUrl || partnerBranding?.subtitle ? (
           <div className="mb-6 rounded-lg border border-surface-200 bg-white p-4 flex flex-col sm:flex-row sm:items-center gap-4">
             {partnerBranding.personalLogoUrl ? (
@@ -42,8 +67,7 @@ export function RealtorDashboardClient({
         ) : null}
         <h1 className="text-2xl font-semibold text-surface-900">Your leads</h1>
         <p className="text-sm text-surface-600 mt-1 mb-6">
-          Leads attributed to your partner account appear here. Share your public
-          apply link with buyers.
+          Leads attributed to your partner account appear here.
         </p>
 
         {leads.length === 0 ? (
@@ -81,6 +105,19 @@ export function RealtorDashboardClient({
           </div>
         )}
       </div>
+
+      {toast ? (
+        <div
+          className={`fixed bottom-4 right-4 text-sm px-4 py-2.5 rounded shadow-lg ${
+            toast.type === "success"
+              ? "bg-surface-900 text-white"
+              : "bg-red-700 text-white"
+          }`}
+          role="status"
+        >
+          {toast.message}
+        </div>
+      ) : null}
     </div>
   );
 }
