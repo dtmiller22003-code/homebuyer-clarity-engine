@@ -73,6 +73,12 @@ export function TopBar({ user }: TopBarProps) {
             >
               Realtors
             </Link>
+            <Link
+              href="/settings/team"
+              className="text-surface-300 hover:text-white"
+            >
+              Team
+            </Link>
           </>
         )}
         <div className="flex items-center gap-2">
