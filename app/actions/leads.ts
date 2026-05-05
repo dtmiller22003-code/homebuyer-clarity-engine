@@ -353,6 +353,54 @@ export async function updateLeadInputs(input: z.infer<typeof leadInputsSchema>) 
 }
 
 // -----------------------------------------------------------------------------
+// recalculateLeadDecision — re-run evaluateLead with stored inputs; refresh JSON only.
+// -----------------------------------------------------------------------------
+export async function recalculateLeadDecision(leadId: string) {
+  const auth = await getAuthContext();
+  if (!isInternalStaffRole(auth.role)) {
+    return { ok: false as const, error: "Access denied" };
+  }
+
+  const [existing] = await db
+    .select()
+    .from(leads)
+    .where(
+      and(
+        eq(leads.id, leadId),
+        eq(leads.organizationId, auth.organizationId),
+      ),
+    )
+    .limit(1);
+
+  if (!existing) {
+    return { ok: false as const, error: "Lead not found or access denied" };
+  }
+
+  const lead = rowToLead(existing);
+  const { decision: _previousDecision, ...inputs } = lead;
+  const newDecision = evaluateLead(inputs);
+
+  const [updated] = await db
+    .update(leads)
+    .set({
+      decision: newDecision,
+      lastUpdated: new Date(),
+    })
+    .where(eq(leads.id, leadId))
+    .returning();
+
+  if (!updated) {
+    return { ok: false as const, error: "Lead not found or access denied" };
+  }
+
+  revalidatePath("/");
+  const [enriched] = await enrichLeadsWithIntakeSource(auth.organizationId, [
+    updated,
+  ]);
+  return { ok: true as const, lead: enriched };
+}
+
+// -----------------------------------------------------------------------------
 // listTeamMembers — for the assignee dropdown
 // -----------------------------------------------------------------------------
 export async function listTeamMembers() {

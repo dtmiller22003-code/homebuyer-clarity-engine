@@ -8,7 +8,12 @@ import { Sidebar, type FilterState } from "@/components/Sidebar";
 import { LeadFeed } from "@/components/LeadFeed";
 import { DetailPanel } from "@/components/DetailPanel";
 import { TopBar } from "@/components/TopBar";
-import { bulkDeleteLeads, deleteLead, updateLeadStatus } from "@/app/actions/leads";
+import {
+  bulkDeleteLeads,
+  deleteLead,
+  recalculateLeadDecision,
+  updateLeadStatus,
+} from "@/app/actions/leads";
 import type { RealtorLeaderboardSnapshot } from "@/app/actions/realtor-performance";
 import { downloadLeadsCsv } from "@/lib/export-leads-csv";
 import { isAdminRole, isInternalStaffRole } from "@/lib/auth-roles";
@@ -205,6 +210,22 @@ export function DashboardClient({
     });
   };
 
+  const handleRecalculateLead = () => {
+    if (!selectedId) return;
+    startTransition(async () => {
+      const res = await recalculateLeadDecision(selectedId);
+      if (!res.ok) {
+        flashToast("error", res.error);
+        return;
+      }
+      setLeads((ls) =>
+        ls.map((l) => (l.id === res.lead.id ? res.lead : l)),
+      );
+      flashToast("success", "Lead recalculated");
+      router.refresh();
+    });
+  };
+
   const handleBulkToggle = (leadId: string, checked: boolean) => {
     setBulkSelectedIds((prev) =>
       checked
@@ -378,6 +399,12 @@ export function DashboardClient({
               lead={selectedLead}
               canEditPipeline={isInternalStaffRole(currentUser.role)}
               onPipelineChange={handlePipelineChange}
+              onRecalculate={
+                isInternalStaffRole(currentUser.role)
+                  ? handleRecalculateLead
+                  : undefined
+              }
+              recalculatePending={isPending}
             />
           </div>
         </main>

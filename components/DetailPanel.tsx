@@ -16,6 +16,9 @@ interface DetailPanelProps {
   lead: Lead | null;
   canEditPipeline?: boolean;
   onPipelineChange?: (leadId: string, status: LeadPipelineStatus) => void;
+  /** Admin / LO — re-run decision engine with saved inputs (no field edits). */
+  onRecalculate?: () => void;
+  recalculatePending?: boolean;
 }
 
 const readinessVariant = {
@@ -28,6 +31,8 @@ export function DetailPanel({
   lead,
   canEditPipeline = false,
   onPipelineChange,
+  onRecalculate,
+  recalculatePending = false,
 }: DetailPanelProps) {
   if (!lead) {
     return (
@@ -155,7 +160,22 @@ export function DetailPanel({
         </div>
 
         {/* Decision Summary */}
-        <Section title="Decision Summary">
+        <div className="px-6 py-4 border-b border-surface-100">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-surface-500">
+              Decision Summary
+            </h3>
+            {onRecalculate ? (
+              <button
+                type="button"
+                onClick={onRecalculate}
+                disabled={recalculatePending}
+                className="text-xs font-semibold text-brand hover:underline disabled:opacity-50"
+              >
+                {recalculatePending ? "Recalculating…" : "Recalculate"}
+              </button>
+            ) : null}
+          </div>
           <div className="bg-surface-50 border border-surface-200 rounded-md p-3">
             <p className="text-sm text-surface-800 leading-relaxed">
               {decision.explanation}
@@ -174,7 +194,7 @@ export function DetailPanel({
               )}
             </div>
           </div>
-        </Section>
+        </div>
 
         {/* Pillar breakdown */}
         <Section title="Pillar Analysis">

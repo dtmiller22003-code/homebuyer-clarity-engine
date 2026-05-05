@@ -4,7 +4,7 @@
 //
 // Rules encoded here are from the business-logic spec:
 //   - Credit: 580+ FHA, <580 needs 10% down, 620+ for Non-QM
-//   - Income: gross income, credit-report debts only, DTI threshold
+//   - Income: gross-income midpoints, existing debts + rough mortgage for total DTI snapshot
 //   - Cash: QM 3.5% baseline, Non-QM 10-20% down + 2% closing
 //   - Readiness: 3/3 = ideal, 2/3 = workable, <=1 = not ready
 // =============================================================================
@@ -32,7 +32,7 @@ const incomeMidpoint: Record<IncomeRange, number> = {
   "40K_60K": 50000,
   "60K_90K": 75000,
   "90K_150K": 120000,
-  "150K_PLUS": 180000,
+  "150K_PLUS": 220000,
 };
 
 const cashMidpoint: Record<CashRange, number> = {
@@ -50,6 +50,39 @@ const creditMidpoint: Record<CreditRange, number> = {
   "680_739": 710,
   "740_PLUS": 760,
 };
+
+// -----------------------------------------------------------------------------
+// Income / debt helpers — mortgage-realistic DTI snapshot (not underwriting).
+// -----------------------------------------------------------------------------
+export function getEstimatedMonthlyGrossIncome(inputs: LeadInputs): number {
+  const annual = incomeMidpoint[inputs.annualGrossIncome];
+  return annual / 12;
+}
+
+/** Rough mortgage payment: ~1% of target price per month (placeholder when unknown). */
+export function getEstimatedMortgagePayment(inputs: LeadInputs): number {
+  const price = inputs.targetPurchasePrice ?? 300000;
+  return price * 0.01;
+}
+
+/**
+ * Existing debt payments as % of gross monthly income (no mortgage payment).
+ */
+export function getExistingDebtRatio(inputs: LeadInputs): number {
+  const mg = getEstimatedMonthlyGrossIncome(inputs);
+  if (mg <= 0) return 100;
+  return (inputs.monthlyDebtPayments / mg) * 100;
+}
+
+/**
+ * Estimated total DTI % = (existing monthly debts + estimated mortgage) / monthly gross.
+ */
+export function getEstimatedTotalDti(inputs: LeadInputs): number {
+  const mg = getEstimatedMonthlyGrossIncome(inputs);
+  if (mg <= 0) return 100;
+  const mortgage = getEstimatedMortgagePayment(inputs);
+  return ((inputs.monthlyDebtPayments + mortgage) / mg) * 100;
+}
 
 // Investment property — buyer-facing wording only (cash + explanation). No scoring impact.
 type InvestmentIncomeDocTone = "traditional" | "writeoffs" | "neutral";
@@ -187,14 +220,9 @@ export function scoreCredit(inputs: LeadInputs): PillarAnalysis {
 }
 
 // -----------------------------------------------------------------------------
-// INCOME PILLAR (DTI-based using gross income)
+// INCOME PILLAR (estimated total DTI + existing debt ratio vs gross income)
 // -----------------------------------------------------------------------------
-// We compute a rough DTI assuming an estimated future mortgage payment.
-// Exact payment comes from pricing later; for Phase 1 we use a heuristic.
 export function scoreIncome(inputs: LeadInputs): PillarAnalysis {
-  const annualGross = incomeMidpoint[inputs.annualGrossIncome];
-  const monthlyGross = annualGross / 12;
-  const monthlyDebt = inputs.monthlyDebtPayments;
   const factors: string[] = [];
 
   // Self-employed special handling
@@ -233,51 +261,60 @@ export function scoreIncome(inputs: LeadInputs): PillarAnalysis {
     };
   }
 
-  // Standard DTI-based scoring.
-  // Back-end DTI with debts only (front-end DTI added later when we know the payment).
-  const dtiWithoutMortgage =
-    monthlyGross > 0 ? (monthlyDebt / monthlyGross) * 100 : 100;
+  const annualGross = incomeMidpoint[inputs.annualGrossIncome];
+  const totalDti = getEstimatedTotalDti(inputs);
+  const existingRatio = getExistingDebtRatio(inputs);
 
-  // Rough target: keep existing debt DTI under ~15% so mortgage fits under 43-50% total.
-  if (dtiWithoutMortgage <= 10) {
-    factors.push(
-      `Gross income ~$${annualGross.toLocaleString()}/yr with minimal existing debt`,
-    );
-    factors.push(`Existing debt DTI: ${dtiWithoutMortgage.toFixed(1)}%`);
-    factors.push("Significant room for a mortgage payment");
+  factors.push(
+    `Estimated gross income ~$${annualGross.toLocaleString()}/yr (midpoint of selected range)`,
+  );
+  factors.push(`Estimated total DTI (rough): ${totalDti.toFixed(1)}%`);
+  factors.push(`Existing monthly debts vs gross income: ${existingRatio.toFixed(1)}%`);
+  factors.push(
+    "Estimated mortgage payment is based on approximately 1% of the target purchase price (or a $300k placeholder when no price is entered).",
+  );
+  factors.push(
+    "Final DTI depends on taxes, insurance, HOA dues, interest rate, and verified liabilities.",
+  );
+  factors.push(
+    "AUS findings and lender overlays may allow or restrict higher DTI.",
+  );
+
+  if (totalDti <= 43 && existingRatio <= 30) {
     return {
       score: "strong",
-      headline: "Strong income-to-debt ratio",
+      headline: "Manageable for mortgage review",
       detail:
-        "Gross income comfortably supports existing debts with plenty of room for a mortgage payment. This is a strong pillar.",
+        "Based on your estimated income, your debt load appears manageable for a mortgage review.",
       factors,
     };
   }
 
-  if (dtiWithoutMortgage <= 20) {
-    factors.push(`Existing debt DTI: ${dtiWithoutMortgage.toFixed(1)}%`);
-    factors.push("Moderate debt load — workable with a reasonable purchase price");
+  if (totalDti <= 50) {
     return {
       score: "moderate",
-      headline: "Workable income-to-debt",
+      headline: "Income may support a mortgage",
       detail:
-        "Existing debt is manageable relative to income. How much home fits comfortably will depend on how the mortgage payment interacts with total DTI — review with your loan officer based on how the file is structured.",
+        "Your income may still support a mortgage, but the final approval will depend on the full payment, taxes, insurance, and debts.",
       factors,
     };
   }
 
-  factors.push(`Existing debt DTI: ${dtiWithoutMortgage.toFixed(1)}%`);
-  factors.push(
-    "Debt load is high relative to income — not right now for the strongest snapshot in this pillar",
-  );
-  factors.push(
-    "Paying down debt is often the fastest way to improve your options based on how the file is structured",
-  );
+  if (totalDti <= 56) {
+    return {
+      score: "moderate",
+      headline: "Stretch — higher DTI may still qualify",
+      detail:
+        "This may be a stretch, but some programs may still allow higher DTI with strong compensating factors.",
+      factors,
+    };
+  }
+
   return {
     score: "weak",
-    headline: "Debt pressure is high — room to strengthen",
+    headline: "Debt load may challenge approval",
     detail:
-      "Existing debts use a large share of income, leaving little room for a mortgage payment in this snapshot. Building this area can improve your options; there may be a stronger path after paydown — review with your loan officer.",
+      "Your current debt load may make approval difficult unless debts are reduced, income increases, or a co-borrower is added.",
     factors,
   };
 }
@@ -292,11 +329,10 @@ export function scoreCash(inputs: LeadInputs): PillarAnalysis {
   const isInvestment = inputs.occupancyIntent === "INVESTMENT_PROPERTY";
   const invTone = investmentIncomeDocTone(inputs);
 
-  const annualGross = incomeMidpoint[inputs.annualGrossIncome];
-  const monthlyGross = annualGross / 12;
-  const dtiWithoutMortgage =
-    monthlyGross > 0 ? (inputs.monthlyDebtPayments / monthlyGross) * 100 : 100;
-  const highDebtPressure = dtiWithoutMortgage > 20;
+  const totalDtiCash = getEstimatedTotalDti(inputs);
+  const existingRatioCash = getExistingDebtRatio(inputs);
+  const highDebtPressure =
+    totalDtiCash > 50 || existingRatioCash > 45;
 
   const selfEmployedHeavyWriteOffs =
     inputs.employmentType === "SELF_EMPLOYED_FILED" &&
@@ -570,14 +606,6 @@ export function determineReadiness(
 // READINESS BLOCKERS (business rules — wording only affects explanation via readiness)
 // NOT_READY_YET is only allowed when at least one blocker is true.
 // -----------------------------------------------------------------------------
-/** DTI = monthlyDebtPayments / (annualGrossIncome / 12), as a percentage. */
-function backendDtiPercent(inputs: LeadInputs): number {
-  const annualGross = incomeMidpoint[inputs.annualGrossIncome];
-  const monthlyGross = annualGross / 12;
-  if (monthlyGross <= 0) return 100;
-  return (inputs.monthlyDebtPayments / monthlyGross) * 100;
-}
-
 function hasReadinessBlocker(inputs: LeadInputs): boolean {
   if (inputs.creditRange === "BELOW_580") return true;
 
@@ -589,7 +617,7 @@ function hasReadinessBlocker(inputs: LeadInputs): boolean {
     if (lowCashForInvestment) return true;
   }
 
-  if (backendDtiPercent(inputs) > 20) return true;
+  if (getEstimatedTotalDti(inputs) > 56) return true;
 
   return false;
 }
@@ -657,18 +685,20 @@ function buildRecommendations(
     });
   }
 
-  const dtiWithoutMortgage = backendDtiPercent(inputs);
-  const highDebtPressure = dtiWithoutMortgage > 20;
+  const totalDtiRec = getEstimatedTotalDti(inputs);
+  const existingRatioRec = getExistingDebtRatio(inputs);
+
+  const suggestPayDownDebt =
+    totalDtiRec > 50 || existingRatioRec > 45;
 
   const incomeBelow60k =
     inputs.annualGrossIncome === "UNDER_40K" ||
     inputs.annualGrossIncome === "40K_60K";
-  const coBorrowerFromLowIncome =
-    incomeBelow60k && inputs.monthlyDebtPayments > 300;
-  const coBorrowerFromDebtOrWeakIncome =
-    income.score === "weak" || highDebtPressure;
+  const coBorrowerFromLowIncomeDebt =
+    incomeBelow60k && inputs.monthlyDebtPayments > 500;
+  const coBorrowerFromHighTotalDti = totalDtiRec > 56;
 
-  if (coBorrowerFromDebtOrWeakIncome) {
+  if (suggestPayDownDebt) {
     recs.push({
       id: "pay-down-debt",
       title: "Pay down revolving debt",
@@ -679,13 +709,13 @@ function buildRecommendations(
     });
   }
 
-  if (coBorrowerFromDebtOrWeakIncome || coBorrowerFromLowIncome) {
+  if (coBorrowerFromHighTotalDti || coBorrowerFromLowIncomeDebt) {
     recs.push({
       id: "co-borrower",
       title: "Consider adding a co-borrower",
       description:
         "Adding a co-borrower can strengthen the income side of the file and open up more flexibility depending on how everything is structured. This is worth reviewing with your loan officer to see if it creates a stronger path.",
-      impact: coBorrowerFromLowIncome ? "high" : "medium",
+      impact: "high",
       category: "structure",
     });
   }
