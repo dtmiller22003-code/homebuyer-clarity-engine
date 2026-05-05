@@ -1,9 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { provisionLoanOfficer } from "@/app/actions/settings";
 import { slugifyPublicProfile } from "@/lib/slugify";
+
+const cleanSlug = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-");
 
 export function InviteLoanOfficerForm() {
   const router = useRouter();
@@ -11,69 +19,64 @@ export function InviteLoanOfficerForm() {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [slug, setSlug] = useState("");
-  const [phone, setPhone] = useState("");
-  const [bio, setBio] = useState("");
   const [applicationLink, setApplicationLink] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
-  const baseUrl = useMemo(() => {
-    if (typeof window !== "undefined") return window.location.origin;
-    return "";
-  }, []);
+  const showToast = (type: "success" | "error", text: string) => {
+    setToast({ type, text });
+    window.setTimeout(() => setToast(null), 4000);
+  };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setMessage(null);
+    setFormError(null);
     startTransition(async () => {
       const res = await provisionLoanOfficer({
-        displayName,
-        email,
-        slug,
-        phone: phone.trim() || undefined,
-        bio: bio.trim() || undefined,
+        displayName: displayName.trim(),
+        email: email.trim(),
+        slug: slug.trim(),
         applicationLink: applicationLink.trim() || undefined,
       });
       if (!res.ok) {
-        setError(res.error);
+        setFormError(res.error);
         return;
       }
       setDisplayName("");
       setEmail("");
       setSlug("");
-      setPhone("");
-      setBio("");
       setApplicationLink("");
-      setMessage(
-        res.invitationSent
-          ? "Loan officer saved. An invitation email was sent so they can sign in."
-          : "Loan officer saved. They already had an account — no new invite email was sent.",
-      );
+      showToast("success", "Loan officer invited");
       router.refresh();
     });
   };
 
-  const slugPreview = slug.trim() ? slugifyPublicProfile(slug) : "";
-  const previewLink =
-    slugPreview && baseUrl
-      ? `${baseUrl}/apply/lo/${encodeURIComponent(slugPreview)}`
-      : null;
-
   return (
-    <section className="rounded-lg border border-surface-200 bg-white p-5 mb-6">
-      <h2 className="text-lg font-semibold text-surface-900">Invite loan officer</h2>
-      <p className="text-sm text-surface-600 mt-1">
-        Creates the Supabase Auth user (or links an existing one), adds them to
-        your team with role <code className="text-xs bg-surface-100 px-1 rounded">loan_officer</code>, and sets their public apply link{" "}
-        <code className="text-xs bg-surface-100 px-1 rounded">/apply/lo/your-slug</code>
-        . No manual work in the Supabase dashboard is required.
-      </p>
-
-      <form onSubmit={handleSubmit} className="mt-4 grid gap-3 max-w-xl">
+    <>
+      <form
+        onSubmit={handleInvite}
+        className="max-w-lg space-y-3 border border-surface-200 rounded-lg p-4 bg-white"
+      >
+        <h2 className="text-sm font-semibold text-surface-900">
+          Invite Loan Officer
+        </h2>
+        <p className="text-xs text-surface-600 leading-relaxed">
+          Creates their account, adds them as{" "}
+          <code className="text-[11px] bg-surface-100 px-1 rounded">
+            loan_officer
+          </code>
+          , and enables{" "}
+          <code className="text-[11px] bg-surface-100 px-1 rounded">
+            /apply/lo/your-slug
+          </code>
+          .
+        </p>
         <div>
           <label className="block text-xs font-medium text-surface-700 mb-1">
-            Display name
+            Name
           </label>
           <input
             required
@@ -84,7 +87,7 @@ export function InviteLoanOfficerForm() {
         </div>
         <div>
           <label className="block text-xs font-medium text-surface-700 mb-1">
-            Email (sign-in / magic link)
+            Email
           </label>
           <input
             required
@@ -96,69 +99,59 @@ export function InviteLoanOfficerForm() {
         </div>
         <div>
           <label className="block text-xs font-medium text-surface-700 mb-1">
-            Public URL slug
+            Slug
           </label>
           <input
             required
             value={slug}
-            onChange={(e) => setSlug(e.target.value.toLowerCase())}
+            onChange={(e) => setSlug(cleanSlug(e.target.value))}
             placeholder="e.g. jane-smith"
-            className="w-full rounded border border-surface-300 px-3 py-2 text-sm"
+            className="w-full rounded border border-surface-300 px-3 py-2 text-sm font-mono"
           />
-          {previewLink ? (
-            <p className="mt-1 text-[11px] text-surface-500 break-all">
-              Public lead link: {previewLink}
-            </p>
-          ) : null}
+          <p className="mt-1 text-[11px] text-surface-500">
+            Lowercase, dash-separated (stored as{" "}
+            {slug.trim() ? slugifyPublicProfile(slug) || "…" : "…"}).
+          </p>
         </div>
         <div>
           <label className="block text-xs font-medium text-surface-700 mb-1">
-            Phone (optional)
+            Application link (optional)
           </label>
           <input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="w-full rounded border border-surface-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-surface-700 mb-1">
-            Bio (optional)
-          </label>
-          <textarea
-            value={bio}
-            onChange={(e) => setBio(e.target.value)}
-            rows={2}
-            className="w-full rounded border border-surface-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-surface-700 mb-1">
-            Application link (optional, https)
-          </label>
-          <input
+            type="url"
+            inputMode="url"
             value={applicationLink}
             onChange={(e) => setApplicationLink(e.target.value)}
-            placeholder="Full mortgage application URL"
+            placeholder="https://…"
             className="w-full rounded border border-surface-300 px-3 py-2 text-sm"
           />
         </div>
-        {error ? (
+        {formError ? (
           <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
-            {error}
+            {formError}
           </p>
-        ) : null}
-        {message ? (
-          <p className="text-sm text-green-700">{message}</p>
         ) : null}
         <button
           type="submit"
           disabled={pending}
-          className="w-fit rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          className="rounded-md bg-brand text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
         >
-          {pending ? "Saving…" : "Invite loan officer"}
+          {pending ? "Sending…" : "Invite loan officer"}
         </button>
       </form>
-    </section>
+
+      {toast ? (
+        <div
+          className={`fixed bottom-4 right-4 text-sm px-4 py-2.5 rounded shadow-lg z-50 ${
+            toast.type === "success"
+              ? "bg-surface-900 text-white"
+              : "bg-red-700 text-white"
+          }`}
+          role="status"
+        >
+          {toast.text}
+        </div>
+      ) : null}
+    </>
   );
 }

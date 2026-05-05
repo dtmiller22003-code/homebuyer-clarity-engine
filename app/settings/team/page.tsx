@@ -1,14 +1,19 @@
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { InviteLoanOfficerForm } from "@/app/settings/team/InviteLoanOfficerForm";
+import {
+  LoanOfficerTableRow,
+  TeamLoanOfficersClient,
+} from "@/app/settings/team/TeamLoanOfficersClient";
 import { TeamSettingsClient } from "@/app/settings/team/TeamSettingsClient";
 import { db } from "@/db/client";
 import { organizations, teamMembers } from "@/db/schema";
+import { isAdminRole } from "@/lib/auth-roles";
 import { getAuthContext } from "@/lib/supabase/auth";
 
 export default async function TeamSettingsPage() {
   const auth = await getAuthContext();
-  if (auth.role !== "admin") {
+  if (!isAdminRole(auth.role)) {
     redirect("/");
   }
 
@@ -59,6 +64,18 @@ export default async function TeamSettingsPage() {
       ? org.defaultAssigneeId
       : normalizedMembers[0].id;
 
+  const loanOfficers: LoanOfficerTableRow[] = normalizedMembers
+    .filter(
+      (m) => m.role === "loan_officer" || m.role === "agent",
+    )
+    .map((m) => ({
+      id: m.id,
+      displayName: m.displayName,
+      email: m.email,
+      slug: m.slug,
+      applicationLink: m.applicationLink,
+    }));
+
   return (
     <div className="p-6 space-y-4">
       <div>
@@ -70,7 +87,10 @@ export default async function TeamSettingsPage() {
         </p>
       </div>
 
-      <InviteLoanOfficerForm />
+      <div className="space-y-8">
+        <InviteLoanOfficerForm />
+        <TeamLoanOfficersClient initialLoanOfficers={loanOfficers} />
+      </div>
 
       <TeamSettingsClient
         members={normalizedMembers}

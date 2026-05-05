@@ -5,7 +5,7 @@
 
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db/client";
@@ -300,6 +300,26 @@ export async function provisionLoanOfficer(
     return provisioned;
   }
 
+  const emailLower = parsed.data.email.trim().toLowerCase();
+  const [emailDup] = await db
+    .select()
+    .from(teamMembers)
+    .where(
+      and(
+        eq(teamMembers.organizationId, authCtx.organizationId),
+        sql`lower(${teamMembers.email}) = ${emailLower}`,
+      ),
+    )
+    .limit(1);
+
+  if (emailDup && emailDup.userId !== provisioned.userId) {
+    return {
+      ok: false,
+      error:
+        "This email is already assigned to another team member in your organization.",
+    };
+  }
+
   const [existingTm] = await db
     .select()
     .from(teamMembers)
@@ -314,6 +334,18 @@ export async function provisionLoanOfficer(
       ok: false,
       error:
         "This email is already linked to another organization. Use a different email or remove the other membership first.",
+    };
+  }
+
+  if (
+    existingTm &&
+    existingTm.organizationId === authCtx.organizationId &&
+    existingTm.role === "admin"
+  ) {
+    return {
+      ok: false,
+      error:
+        "This email is already assigned to an admin in your organization. Use a different email for a loan officer.",
     };
   }
 
