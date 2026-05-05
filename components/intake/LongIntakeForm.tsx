@@ -344,11 +344,12 @@ export function LongIntakeForm({
         />
       ) : null}
       <SelectField
-        label="Annual gross income (before taxes)"
+        label="Total household annual gross income before taxes"
         name="annualGrossIncome"
         value={annualGrossIncome}
         onChange={setAnnualGrossIncome}
         options={BUYER_INCOME_OPTIONS}
+        helperText="Include income for anyone who will be on the loan application."
         required
       />
       <SelectField

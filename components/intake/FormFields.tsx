@@ -54,6 +54,8 @@ export function SelectField<T extends string>(props: {
   options: readonly { value: T; label: string }[];
   required?: boolean;
   error?: string | null;
+  /** Optional muted helper below the label (e.g. intake guidance). */
+  helperText?: string;
 }) {
   const id = useId();
   const inputId = `${props.name}-${id}`;
@@ -63,6 +65,9 @@ export function SelectField<T extends string>(props: {
         {props.label}
         {props.required ? " *" : ""}
       </label>
+      {props.helperText ? (
+        <p className="text-xs text-surface-500 mb-1.5 -mt-0.5">{props.helperText}</p>
+      ) : null}
       <select
         id={inputId}
         name={props.name}
