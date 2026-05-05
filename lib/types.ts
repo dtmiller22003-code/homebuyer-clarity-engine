@@ -22,6 +22,7 @@ export type EmploymentType =
 
 export type OccupancyIntent = "PRIMARY_HOME" | "INVESTMENT_PROPERTY";
 
+/** Canonical buckets used by `decision-engine` after `normalizeCreditRange()`. */
 export type CreditRange =
   | "BELOW_580"
   | "580_619"

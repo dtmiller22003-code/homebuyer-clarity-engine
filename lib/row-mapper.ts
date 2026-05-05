@@ -5,6 +5,7 @@
 
 import type { Lead, LeadAttributionSource, LeadInputs } from "./types";
 import type { LeadRow, NewLeadRow } from "@/db/schema";
+import { normalizeCreditRange } from "./credit-range-normalize";
 import { evaluateLead } from "./decision-engine";
 import { normalizeLeadPipelineStatus } from "./lead-pipeline";
 
@@ -21,7 +22,7 @@ export function rowToLead(row: LeadRow): Lead {
     createdBy: row.createdBy,
     assignedTo: row.assignedTo,
     leadSource: row.leadSource,
-    creditRange: row.creditRange,
+    creditRange: normalizeCreditRange(String(row.creditRange)),
     annualGrossIncome: row.annualGrossIncome,
     monthlyDebtPayments: row.monthlyDebtPayments,
     cashAvailable: row.cashAvailable,
@@ -51,8 +52,10 @@ export function leadInputsToRow(
 ): Omit<NewLeadRow, "id" | "createdAt" | "lastUpdated"> {
   // Generate a temporary inputs object so the engine can evaluate it.
   // ID and dates don't affect the decision, so we use placeholders.
+  const creditRange = normalizeCreditRange(inputs.creditRange as string);
   const inputsForEval: LeadInputs = {
     ...inputs,
+    creditRange,
     id: "pending",
     createdAt: new Date().toISOString(),
     lastUpdated: new Date().toISOString(),
@@ -69,7 +72,7 @@ export function leadInputsToRow(
     assignedTo: inputs.assignedTo,
     createdBy: inputs.createdBy,
     leadSource: inputs.leadSource,
-    creditRange: inputs.creditRange,
+    creditRange,
     annualGrossIncome: inputs.annualGrossIncome,
     monthlyDebtPayments: inputs.monthlyDebtPayments,
     cashAvailable: inputs.cashAvailable,
