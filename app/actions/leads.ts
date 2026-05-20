@@ -1,18 +1,29 @@
 // =============================================================================
 // Server actions for lead operations.
+// These are the replacement for Phase 1's local setState handlers.
 // =============================================================================
 
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db/client";
 import { leadEvents, leads } from "@/db/schema";
+import {
+  isAdminRole,
+  isInternalStaffRole,
+  isRealtorPartnerRole,
+} from "@/lib/auth-roles";
 import { getAuthContext } from "@/lib/supabase/auth";
 import { evaluateLead } from "@/lib/decision-engine";
+import { enrichLeadsWithIntakeSource } from "@/lib/enrich-lead-intake-source";
 import { rowToLead } from "@/lib/row-mapper";
-import type { Lead, LeadStatus } from "@/lib/types";
+import type { Lead, LeadPipelineStatus } from "@/lib/types";
+import {
+  LEAD_PIPELINE_STATUSES,
+  normalizeLeadPipelineStatus,
+} from "@/lib/lead-pipeline";
 
 // -----------------------------------------------------------------------------
 // listLeads — used by the dashboard page (server component) to fetch leads
@@ -21,32 +32,51 @@ import type { Lead, LeadStatus } from "@/lib/types";
 export async function listLeads(): Promise<Lead[]> {
   const auth = await getAuthContext();
 
+  const orgScope = eq(leads.organizationId, auth.organizationId);
+  const whereClause =
+    isRealtorPartnerRole(auth.role) && auth.realtorPartnerId
+      ? and(orgScope, eq(leads.realtorPartnerId, auth.realtorPartnerId))
+      : orgScope;
+
   const rows = await db
     .select()
     .from(leads)
-    .where(eq(leads.organizationId, auth.organizationId))
+    .where(whereClause)
     .orderBy(leads.lastUpdated);
 
-  return rows.map(rowToLead);
+  if (isRealtorPartnerRole(auth.role)) {
+    return rows.map(rowToLead);
+  }
+
+  return enrichLeadsWithIntakeSource(auth.organizationId, rows);
 }
 
 // -----------------------------------------------------------------------------
-// updateLeadStatus — approve / archive / send_to_crm
+// updateLeadStatus — pipeline stage (new → closed / dead)
 // -----------------------------------------------------------------------------
-const statusUpdateSchema = z.object({
+const pipelineStatusSchema = z.object({
   leadId: z.string().uuid(),
-  status: z.enum(["new", "reviewed", "approved", "archived", "sent_to_crm"]),
+  status: z
+    .string()
+    .refine(
+      (s): s is LeadPipelineStatus =>
+        (LEAD_PIPELINE_STATUSES as readonly string[]).includes(s),
+      "Invalid pipeline status",
+    ),
 });
 
 export async function updateLeadStatus(input: {
   leadId: string;
-  status: LeadStatus;
+  status: LeadPipelineStatus;
 }) {
   const auth = await getAuthContext();
-  const parsed = statusUpdateSchema.parse(input);
+  if (!isInternalStaffRole(auth.role)) {
+    return { ok: false as const, error: "Access denied" };
+  }
+  const parsed = pipelineStatusSchema.parse(input);
 
-  const [existing] = await db
-    .select({ id: leads.id, status: leads.status })
+  const [before] = await db
+    .select({ status: leads.status })
     .from(leads)
     .where(
       and(
@@ -56,13 +86,12 @@ export async function updateLeadStatus(input: {
     )
     .limit(1);
 
-  if (!existing) {
+  if (!before) {
     return { ok: false as const, error: "Lead not found or access denied" };
   }
 
-  const previousStatus = existing.status;
+  const previousStatus = before.status;
 
-  // Update only if the lead belongs to the same org
   const [updated] = await db
     .update(leads)
     .set({
@@ -81,17 +110,127 @@ export async function updateLeadStatus(input: {
     return { ok: false as const, error: "Lead not found or access denied" };
   }
 
-  // Record event
   await db.insert(leadEvents).values({
     leadId: parsed.leadId,
     actorUserId: auth.userId,
     actorName: auth.displayName,
-    eventType: `status_${parsed.status}`,
-    metadata: { previousStatus },
+    eventType: "pipeline_status",
+    metadata: { previousStatus, newStatus: parsed.status },
   });
 
   revalidatePath("/");
-  return { ok: true as const, lead: rowToLead(updated) };
+  revalidatePath("/realtor");
+  const [enriched] = await enrichLeadsWithIntakeSource(auth.organizationId, [
+    updated,
+  ]);
+  return { ok: true as const, lead: enriched };
+}
+
+// -----------------------------------------------------------------------------
+// deleteLead — admin only; cascades lead_events / lead_documents via FK.
+// -----------------------------------------------------------------------------
+export async function deleteLead(
+  leadId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const auth = await getAuthContext();
+  if (!isAdminRole(auth.role)) {
+    return { ok: false, error: "Only administrators can delete leads." };
+  }
+
+  const uuid = z.string().uuid().safeParse(leadId);
+  if (!uuid.success) {
+    return { ok: false, error: "Invalid lead id." };
+  }
+
+  const removed = await db
+    .delete(leads)
+    .where(
+      and(eq(leads.id, leadId), eq(leads.organizationId, auth.organizationId)),
+    )
+    .returning({ id: leads.id });
+
+  if (removed.length === 0) {
+    return { ok: false, error: "Lead not found or you do not have access." };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/realtor");
+  revalidatePath("/settings/realtors");
+  return { ok: true };
+}
+
+// -----------------------------------------------------------------------------
+// bulkDeleteLeads — admin only; same org scope as deleteLead; FK cascades.
+// -----------------------------------------------------------------------------
+const MAX_BULK_DELETE = 100;
+
+export async function bulkDeleteLeads(
+  leadIds: string[],
+): Promise<
+  { ok: true; deletedCount: number } | { ok: false; error: string }
+> {
+  const auth = await getAuthContext();
+  if (!isAdminRole(auth.role)) {
+    return { ok: false, error: "Only administrators can delete leads." };
+  }
+
+  const unique = [...new Set(leadIds.map((id) => id.trim()).filter(Boolean))];
+  if (unique.length === 0) {
+    return { ok: false, error: "No leads selected." };
+  }
+
+  if (unique.length > MAX_BULK_DELETE) {
+    return {
+      ok: false,
+      error: "You can delete up to 100 leads at a time.",
+    };
+  }
+
+  const uuidSchema = z.string().uuid();
+  const validIds = unique.filter((id) => uuidSchema.safeParse(id).success);
+  if (validIds.length !== unique.length) {
+    return { ok: false, error: "Invalid lead id in selection." };
+  }
+
+  const existing = await db
+    .select({ id: leads.id })
+    .from(leads)
+    .where(
+      and(
+        eq(leads.organizationId, auth.organizationId),
+        inArray(leads.id, validIds),
+      ),
+    );
+
+  if (existing.length !== validIds.length) {
+    return {
+      ok: false,
+      error:
+        "One or more selected leads were not found or are not in your organization.",
+    };
+  }
+
+  const removed = await db
+    .delete(leads)
+    .where(
+      and(
+        eq(leads.organizationId, auth.organizationId),
+        inArray(leads.id, validIds),
+      ),
+    )
+    .returning({ id: leads.id });
+
+  if (removed.length !== validIds.length) {
+    return {
+      ok: false,
+      error: "Could not delete all selected leads. Refresh and try again.",
+    };
+  }
+
+  revalidatePath("/");
+  revalidatePath("/realtor");
+  revalidatePath("/settings/realtors");
+  return { ok: true, deletedCount: removed.length };
 }
 
 // -----------------------------------------------------------------------------
@@ -130,6 +269,9 @@ const leadInputsSchema = z.object({
 
 export async function updateLeadInputs(input: z.infer<typeof leadInputsSchema>) {
   const auth = await getAuthContext();
+  if (!isInternalStaffRole(auth.role)) {
+    return { ok: false as const, error: "Access denied" };
+  }
   const parsed = leadInputsSchema.parse(input);
 
   // Fetch current row to confirm org access
@@ -155,7 +297,7 @@ export async function updateLeadInputs(input: z.infer<typeof leadInputsSchema>) 
     lastUpdated: new Date().toISOString(),
     createdBy: existing.createdBy,
     leadSource: existing.leadSource,
-    status: existing.status,
+    status: normalizeLeadPipelineStatus(String(existing.status)),
     ...parsed,
   });
 
@@ -204,7 +346,58 @@ export async function updateLeadInputs(input: z.infer<typeof leadInputsSchema>) 
   });
 
   revalidatePath("/");
-  return { ok: true as const, lead: rowToLead(updated) };
+  const [enriched] = await enrichLeadsWithIntakeSource(auth.organizationId, [
+    updated,
+  ]);
+  return { ok: true as const, lead: enriched };
+}
+
+// -----------------------------------------------------------------------------
+// recalculateLeadDecision — re-run evaluateLead with stored inputs; refresh JSON only.
+// -----------------------------------------------------------------------------
+export async function recalculateLeadDecision(leadId: string) {
+  const auth = await getAuthContext();
+  if (!isInternalStaffRole(auth.role)) {
+    return { ok: false as const, error: "Access denied" };
+  }
+
+  const [existing] = await db
+    .select()
+    .from(leads)
+    .where(
+      and(
+        eq(leads.id, leadId),
+        eq(leads.organizationId, auth.organizationId),
+      ),
+    )
+    .limit(1);
+
+  if (!existing) {
+    return { ok: false as const, error: "Lead not found or access denied" };
+  }
+
+  const lead = rowToLead(existing);
+  const { decision: _previousDecision, ...inputs } = lead;
+  const newDecision = evaluateLead(inputs);
+
+  const [updated] = await db
+    .update(leads)
+    .set({
+      decision: newDecision,
+      lastUpdated: new Date(),
+    })
+    .where(eq(leads.id, leadId))
+    .returning();
+
+  if (!updated) {
+    return { ok: false as const, error: "Lead not found or access denied" };
+  }
+
+  revalidatePath("/");
+  const [enriched] = await enrichLeadsWithIntakeSource(auth.organizationId, [
+    updated,
+  ]);
+  return { ok: true as const, lead: enriched };
 }
 
 // -----------------------------------------------------------------------------

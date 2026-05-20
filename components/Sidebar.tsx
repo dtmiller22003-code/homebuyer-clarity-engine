@@ -1,15 +1,21 @@
 import type {
+  LeadPipelineStatus,
   LeadSource,
   LoanPath,
   ReadinessLevel,
 } from "@/lib/types";
 import { LEAD_SOURCE_LABELS, READINESS_LABELS } from "@/lib/types";
+import {
+  LEAD_PIPELINE_LABELS,
+  LEAD_PIPELINE_STATUSES,
+} from "@/lib/lead-pipeline";
 
 export interface FilterState {
   readiness: ReadinessLevel | "ALL";
   loanPath: LoanPath | "ALL";
   leadSource: LeadSource | "ALL";
   assignedTo: string | "ALL";
+  pipelineStatus: LeadPipelineStatus | "ALL";
   search: string;
 }
 
@@ -39,6 +45,7 @@ export function Sidebar({
       loanPath: "ALL",
       leadSource: "ALL",
       assignedTo: "ALL",
+      pipelineStatus: "ALL",
       search: "",
     });
 
@@ -128,6 +135,30 @@ export function Sidebar({
             />
           ))}
         </FilterGroup>
+
+        {/* Pipeline status */}
+        <div>
+          <label className="block text-xs font-medium text-surface-700 mb-1.5">
+            Lead status
+          </label>
+          <select
+            value={filters.pipelineStatus}
+            onChange={(e) =>
+              update(
+                "pipelineStatus",
+                e.target.value as LeadPipelineStatus | "ALL",
+              )
+            }
+            className="w-full px-3 py-1.5 text-sm border border-surface-300 rounded focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand bg-white"
+          >
+            <option value="ALL">All statuses</option>
+            {LEAD_PIPELINE_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {LEAD_PIPELINE_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        </div>
 
         {/* Lead Source */}
         <div>

@@ -1,4 +1,4 @@
-import type { Lead, PillarAnalysis, Recommendation } from "@/lib/types";
+import type { Lead, LeadPipelineStatus, PillarAnalysis, Recommendation } from "@/lib/types";
 import {
   CASH_RANGE_LABELS,
   CREDIT_RANGE_LABELS,
@@ -9,15 +9,17 @@ import {
   READINESS_LABELS,
 } from "@/lib/types";
 import { Badge } from "./Badge";
+import { LeadPipelineBadge, LeadPipelineStatusSelect } from "./LeadPipelineUi";
 import { PillarScore } from "./PillarScore";
 
 interface DetailPanelProps {
   lead: Lead | null;
-  onAction: (action: PanelAction, lead: Lead) => void;
-  disabled?: boolean;
+  canEditPipeline?: boolean;
+  onPipelineChange?: (leadId: string, status: LeadPipelineStatus) => void;
+  /** Admin / LO — re-run decision engine with saved inputs (no field edits). */
+  onRecalculate?: () => void;
+  recalculatePending?: boolean;
 }
-
-export type PanelAction = "approve" | "send_to_crm" | "archive";
 
 const readinessVariant = {
   READY_NOW: "strong" as const,
@@ -25,7 +27,13 @@ const readinessVariant = {
   NOT_READY_YET: "weak" as const,
 };
 
-export function DetailPanel({ lead, onAction, disabled }: DetailPanelProps) {
+export function DetailPanel({
+  lead,
+  canEditPipeline = false,
+  onPipelineChange,
+  onRecalculate,
+  recalculatePending = false,
+}: DetailPanelProps) {
   if (!lead) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-white text-center p-8">
@@ -90,6 +98,18 @@ export function DetailPanel({ lead, onAction, disabled }: DetailPanelProps) {
             </div>
           </div>
 
+          <div className="mt-3 pt-3 border-t border-surface-100 flex flex-wrap items-center gap-3">
+            <LeadPipelineBadge status={lead.status} />
+            {canEditPipeline && onPipelineChange ? (
+              <LeadPipelineStatusSelect
+                leadId={lead.id}
+                value={lead.status}
+                onChange={onPipelineChange}
+                variant="compact"
+              />
+            ) : null}
+          </div>
+
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mt-3">
             <MetaRow
               label="Assigned to"
@@ -98,6 +118,31 @@ export function DetailPanel({ lead, onAction, disabled }: DetailPanelProps) {
             <MetaRow
               label="Source"
               value={LEAD_SOURCE_LABELS[lead.leadSource]}
+            />
+            <MetaRow
+              label="Intake source"
+              value={
+                lead.intakeSourceLine ??
+                (() => {
+                  const st = lead.sourceType ?? "company";
+                  if (st === "company") {
+                    return "Source: Company";
+                  }
+                  if (st === "realtor") {
+                    const tail =
+                      lead.sourceDisplayName?.trim() ||
+                      lead.sourceSlug ||
+                      "Unknown realtor";
+                    return `Source: Realtor – ${tail}`;
+                  }
+                  const tail =
+                    lead.sourceDisplayName?.trim() ||
+                    lead.sourceSlug ||
+                    lead.assignedTo ||
+                    "Unknown loan officer";
+                  return `Source: Loan Officer – ${tail}`;
+                })()
+              }
             />
             <MetaRow
               label="Employment"
@@ -115,7 +160,22 @@ export function DetailPanel({ lead, onAction, disabled }: DetailPanelProps) {
         </div>
 
         {/* Decision Summary */}
-        <Section title="Decision Summary">
+        <div className="px-6 py-4 border-b border-surface-100">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-surface-500">
+              Decision Summary
+            </h3>
+            {onRecalculate ? (
+              <button
+                type="button"
+                onClick={onRecalculate}
+                disabled={recalculatePending}
+                className="text-xs font-semibold text-brand hover:underline disabled:opacity-50"
+              >
+                {recalculatePending ? "Recalculating…" : "Recalculate"}
+              </button>
+            ) : null}
+          </div>
           <div className="bg-surface-50 border border-surface-200 rounded-md p-3">
             <p className="text-sm text-surface-800 leading-relaxed">
               {decision.explanation}
@@ -134,7 +194,7 @@ export function DetailPanel({ lead, onAction, disabled }: DetailPanelProps) {
               )}
             </div>
           </div>
-        </Section>
+        </div>
 
         {/* Pillar breakdown */}
         <Section title="Pillar Analysis">
@@ -193,33 +253,6 @@ export function DetailPanel({ lead, onAction, disabled }: DetailPanelProps) {
             </div>
           </Section>
         )}
-      </div>
-
-      {/* Sticky action bar */}
-      <div className="border-t border-surface-200 px-6 py-3 bg-white">
-        <div className="grid grid-cols-2 gap-2">
-          <ActionButton
-            label="Approve"
-            variant="primary"
-            onClick={() => onAction("approve", lead)}
-            disabled={disabled}
-          />
-          <ActionButton
-            label="Mark for handoff"
-            variant="primary-outline"
-            title="Internal status only. Does not send data to an external system."
-            onClick={() => onAction("send_to_crm", lead)}
-            disabled={disabled}
-          />
-          <div className="col-span-2">
-            <ActionButton
-              label="Archive"
-              variant="danger-outline"
-              onClick={() => onAction("archive", lead)}
-              disabled={disabled}
-            />
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -320,37 +353,3 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
   );
 }
 
-function ActionButton({
-  label,
-  variant,
-  onClick,
-  disabled,
-  title,
-}: {
-  label: string;
-  variant: "primary" | "primary-outline" | "secondary" | "danger-outline";
-  onClick: () => void;
-  disabled?: boolean;
-  title?: string;
-}) {
-  const classes: Record<typeof variant, string> = {
-    primary: "bg-brand hover:bg-brand-hover text-white",
-    "primary-outline":
-      "bg-white border border-brand text-brand hover:bg-brand/5",
-    secondary:
-      "bg-white border border-surface-300 text-surface-700 hover:bg-surface-50",
-    "danger-outline":
-      "bg-white border border-surface-300 text-red-700 hover:bg-red-50 hover:border-red-300",
-  };
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className={`w-full py-2 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${classes[variant]}`}
-    >
-      {label}
-    </button>
-  );
-}

@@ -45,6 +45,21 @@ const config: Config = {
       fontFamily: {
         sans: ["system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
       },
+      keyframes: {
+        "lead-link-flash": {
+          "0%": {
+            boxShadow: "0 0 0 0 rgb(22 163 74 / 0.28)",
+            borderColor: "rgb(52 211 153 / 0.9)",
+          },
+          "100%": {
+            boxShadow: "0 0 0 14px rgb(22 163 74 / 0)",
+            borderColor: "rgb(228 228 231 / 1)",
+          },
+        },
+      },
+      animation: {
+        "lead-link-flash": "lead-link-flash 0.85s ease-out forwards",
+      },
     },
   },
   plugins: [],

@@ -1,4 +1,6 @@
-import type { Lead } from "@/lib/types";
+"use client";
+
+import type { Lead, LeadPipelineStatus } from "@/lib/types";
 import {
   CASH_RANGE_LABELS,
   CREDIT_RANGE_LABELS,
@@ -8,12 +10,26 @@ import {
   READINESS_LABELS,
 } from "@/lib/types";
 import { Badge } from "./Badge";
+import { LeadPipelineBadge, LeadPipelineStatusSelect } from "./LeadPipelineUi";
 import { PillarScore } from "./PillarScore";
 
 interface LeadCardProps {
   lead: Lead;
   selected: boolean;
-  onClick: () => void;
+  onSelect: () => void;
+  /** Administrators only — deletes the lead after confirmation in the parent. */
+  showAdminDelete?: boolean;
+  onAdminDelete?: (lead: Lead) => void;
+  deleteDisabled?: boolean;
+  /** Bulk selection (admin dashboard). */
+  showBulkCheckbox?: boolean;
+  bulkChecked?: boolean;
+  onBulkToggle?: (leadId: string, checked: boolean) => void;
+  bulkDisabled?: boolean;
+  showIntakeSource?: boolean;
+  /** Admin / loan officer — pipeline dropdown */
+  showPipelineEditor?: boolean;
+  onPipelineChange?: (leadId: string, status: LeadPipelineStatus) => void;
 }
 
 const readinessVariant = {
@@ -35,20 +51,53 @@ function formatRelativeTime(iso: string): string {
   return `${weeks}w ago`;
 }
 
-export function LeadCard({ lead, selected, onClick }: LeadCardProps) {
+export function LeadCard({
+  lead,
+  selected,
+  onSelect,
+  showAdminDelete,
+  onAdminDelete,
+  deleteDisabled,
+  showBulkCheckbox,
+  bulkChecked,
+  onBulkToggle,
+  bulkDisabled,
+  showIntakeSource,
+  showPipelineEditor,
+  onPipelineChange,
+}: LeadCardProps) {
   const { decision } = lead;
   const fullName = `${lead.firstName} ${lead.lastName}`;
   const initials = `${lead.firstName[0]}${lead.lastName[0]}`;
 
   return (
-    <button
-      onClick={onClick}
-      className={`w-full text-left bg-white border rounded-md p-4 transition-all hover:shadow-sm ${
+    <div
+      className={`flex bg-white border rounded-md overflow-hidden transition-all hover:shadow-sm ${
         selected
           ? "border-brand ring-2 ring-brand/20"
           : "border-surface-200 hover:border-surface-300"
       }`}
     >
+      {showBulkCheckbox ? (
+        <div
+          className="shrink-0 flex items-center px-2 border-r border-surface-200 bg-surface-50"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-surface-300 text-brand focus:ring-brand"
+            checked={!!bulkChecked}
+            disabled={bulkDisabled}
+            onChange={(e) => onBulkToggle?.(lead.id, e.target.checked)}
+            aria-label={`Select ${fullName}`}
+          />
+        </div>
+      ) : null}
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex-1 min-w-0 text-left p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/30"
+      >
       {/* Header: name, readiness, loan path */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -62,9 +111,15 @@ export function LeadCard({ lead, selected, onClick }: LeadCardProps) {
             <div className="text-xs text-surface-500 truncate">
               {lead.email} · {formatRelativeTime(lead.lastUpdated)}
             </div>
+            {showIntakeSource && lead.intakeSourceLine ? (
+              <div className="text-xs text-surface-700 mt-1 font-medium truncate">
+                {lead.intakeSourceLine}
+              </div>
+            ) : null}
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          <LeadPipelineBadge status={lead.status} />
           <Badge variant={readinessVariant[decision.readiness]}>
             {READINESS_LABELS[decision.readiness]}
           </Badge>
@@ -78,6 +133,20 @@ export function LeadCard({ lead, selected, onClick }: LeadCardProps) {
           )}
         </div>
       </div>
+
+      {showPipelineEditor && onPipelineChange ? (
+        <div
+          className="mb-3 flex flex-wrap items-center justify-between gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <LeadPipelineStatusSelect
+            leadId={lead.id}
+            value={lead.status}
+            onChange={onPipelineChange}
+            variant="block"
+          />
+        </div>
+      ) : null}
 
       {/* Inputs grid */}
       <div className="grid grid-cols-4 gap-2 mb-3 text-xs">
@@ -105,7 +174,23 @@ export function LeadCard({ lead, selected, onClick }: LeadCardProps) {
           {decision.strongPillarCount}/3 strong
         </div>
       </div>
-    </button>
+      </button>
+      {showAdminDelete ? (
+        <div className="shrink-0 border-l border-surface-200 flex flex-col justify-center p-2 bg-surface-50">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAdminDelete?.(lead);
+            }}
+            disabled={deleteDisabled}
+            className="text-xs font-medium text-red-700 hover:text-red-900 px-2 py-1.5 rounded border border-red-200 hover:bg-red-50 disabled:opacity-50 whitespace-nowrap"
+          >
+            Delete
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

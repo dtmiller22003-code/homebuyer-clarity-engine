@@ -5,10 +5,11 @@
 // Use at the top of every server action / protected server component.
 // =============================================================================
 
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { db } from "@/db/client";
-import { teamMembers } from "@/db/schema";
+import { realtorPartners, teamMembers } from "@/db/schema";
+import { normalizeStaffRole } from "@/lib/auth-roles";
 import { createClient } from "./server";
 
 export interface AuthContext {
@@ -16,7 +17,10 @@ export interface AuthContext {
   email: string;
   displayName: string;
   organizationId: string;
+  /** Raw DB value: `admin`, `loan_officer`, legacy `agent`, or `realtor_partner`. */
   role: string;
+  /** Set when `role` is `realtor_partner` — ties the user to `leads.realtor_partner_id`. */
+  realtorPartnerId: string | null;
 }
 
 export async function getAuthContext(): Promise<AuthContext> {
@@ -42,11 +46,32 @@ export async function getAuthContext(): Promise<AuthContext> {
     redirect("/login?error=not_provisioned");
   }
 
+  if (member.role === "realtor_partner" && member.realtorPartnerId) {
+    const [partner] = await db
+      .select({
+        isActive: realtorPartners.isActive,
+        deletedAt: realtorPartners.deletedAt,
+      })
+      .from(realtorPartners)
+      .where(
+        and(
+          eq(realtorPartners.id, member.realtorPartnerId),
+          isNull(realtorPartners.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!partner || !partner.isActive) {
+      redirect("/login?error=realtor_inactive");
+    }
+  }
+
   return {
     userId: user.id,
     email: user.email ?? member.email,
     displayName: member.displayName,
     organizationId: member.organizationId,
-    role: member.role,
+    role: normalizeStaffRole(member.role),
+    realtorPartnerId: member.realtorPartnerId ?? null,
   };
 }

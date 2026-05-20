@@ -52,7 +52,7 @@ export function StatsBar({ leads }: StatsBarProps) {
       <StatCard
         label="New Leads"
         value={newLeads}
-        sublabel="unreviewed"
+        sublabel="stage: new"
         accent="blue"
       />
       <StatCard

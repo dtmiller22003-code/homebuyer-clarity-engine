@@ -20,7 +20,7 @@
 
 "use server";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { db } from "@/db/client";
@@ -29,9 +29,14 @@ import {
   leadEvents,
   organizations,
   rateLimits,
+  realtorPartners,
   teamMembers,
 } from "@/db/schema";
 import { evaluateLead } from "@/lib/decision-engine";
+import {
+  COMPANY_DEFAULT_APPLICATION_URL,
+  resolveApplicationRedirectUrl,
+} from "@/lib/default-application-url";
 import { leadInputsToRow } from "@/lib/row-mapper";
 import type {
   LeadDecision,
@@ -81,6 +86,7 @@ function mockPublicResult(leadId: string): PublicResult {
       email: "support@example.com",
       phone: null,
     },
+    primaryApplicationUrl: COMPANY_DEFAULT_APPLICATION_URL,
   };
 }
 
@@ -90,6 +96,8 @@ function mockPublicResult(leadId: string): PublicResult {
 const intakeSchema = z.object({
   organizationId: z.string().uuid(),
   referrerLoSlug: z.string().trim().toLowerCase().optional(),
+  /** Public partner slug from `/apply/realtor/[slug]` or `?partner=` — resolved server-side. */
+  realtorPartnerSlug: z.string().trim().min(1).max(80).optional(),
 
   firstName: z.string().trim().min(1).max(100),
   lastName: z.string().trim().min(1).max(100),
@@ -213,25 +221,72 @@ export async function submitIntake(
       return { ok: false, error: "We couldn't locate the brokerage. Please refresh and try again." };
     }
 
+    // 3b. Resolve realtor partner (optional) — ties the lead to a partner record when valid.
+    let resolvedRealtorPartnerId: string | null = null;
+    let resolvedRealtorSlug: string | null = null;
+    let resolvedRealtorDisplayName: string | null = null;
+    if (data.realtorPartnerSlug) {
+      const slug = data.realtorPartnerSlug.trim().toLowerCase();
+      const [partner] = await db
+        .select()
+        .from(realtorPartners)
+        .where(
+          and(
+            eq(realtorPartners.organizationId, org.id),
+            eq(realtorPartners.slug, slug),
+            eq(realtorPartners.isActive, true),
+            isNull(realtorPartners.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (partner) {
+        resolvedRealtorPartnerId = partner.id;
+        resolvedRealtorSlug = partner.slug;
+        resolvedRealtorDisplayName = partner.displayName;
+      }
+    }
+
     // 4. Resolve assignee
     // Priority: (a) referrerLoSlug if valid, (b) org.defaultAssigneeId, (c) fallback string.
     let assignedToName = "Unassigned";
+    let intakeReferrer: (typeof teamMembers.$inferSelect) | null = null;
 
     if (data.referrerLoSlug) {
+      const loSlug = data.referrerLoSlug.trim().toLowerCase();
       const [referrer] = await db
         .select()
         .from(teamMembers)
         .where(
           and(
             eq(teamMembers.organizationId, org.id),
-            eq(teamMembers.slug, data.referrerLoSlug),
+            eq(teamMembers.slug, loSlug),
           ),
         )
         .limit(1);
 
       if (referrer) {
+        intakeReferrer = referrer;
         assignedToName = referrer.displayName;
       }
+    }
+
+    let sourceType: "company" | "realtor" | "loan_officer" = "company";
+    let sourceSlug: string | null = null;
+    let sourceTeamMemberId: string | null = null;
+    if (resolvedRealtorPartnerId && resolvedRealtorSlug) {
+      sourceType = "realtor";
+      sourceSlug = resolvedRealtorSlug;
+    } else if (intakeReferrer?.slug) {
+      sourceType = "loan_officer";
+      sourceSlug = intakeReferrer.slug;
+      sourceTeamMemberId = intakeReferrer.id;
+    }
+
+    let sourceDisplayName: string | null = null;
+    if (sourceType === "realtor" && resolvedRealtorDisplayName) {
+      sourceDisplayName = resolvedRealtorDisplayName.trim() || null;
+    } else if (sourceType === "loan_officer" && intakeReferrer) {
+      sourceDisplayName = intakeReferrer.displayName.trim() || null;
     }
 
     if (assignedToName === "Unassigned" && org.defaultAssigneeId) {
@@ -275,6 +330,11 @@ export async function submitIntake(
       .values({
         ...insertRow,
         referrerLoSlug: data.referrerLoSlug ?? null,
+        realtorPartnerId: resolvedRealtorPartnerId,
+        sourceType,
+        sourceSlug,
+        sourceDisplayName,
+        sourceTeamMemberId,
       })
       .returning();
 
@@ -291,7 +351,11 @@ export async function submitIntake(
       metadata: {
         formLength: data.formLength,
         referrerLoSlug: data.referrerLoSlug ?? null,
+        realtorPartnerSlug: data.realtorPartnerSlug ?? null,
         leadSource: data.leadSource,
+        sourceType,
+        sourceSlug,
+        sourceTeamMemberId,
       },
     });
 
@@ -339,6 +403,9 @@ export interface PublicResult {
     email: string;
     phone: string | null;
   };
+
+  /** Full mortgage application URL (LO-specific or company default). */
+  primaryApplicationUrl: string;
 }
 
 // -----------------------------------------------------------------------------
@@ -473,6 +540,31 @@ export async function getPublicResult(
       phone: org.companyPhone,
     };
 
+    let applicationLink: string | null = null;
+    if (row.sourceTeamMemberId) {
+      const [m] = await db
+        .select({ applicationLink: teamMembers.applicationLink })
+        .from(teamMembers)
+        .where(eq(teamMembers.id, row.sourceTeamMemberId))
+        .limit(1);
+      applicationLink = m?.applicationLink ?? null;
+    } else if (row.referrerLoSlug) {
+      const loSlug = row.referrerLoSlug.trim().toLowerCase();
+      const [m] = await db
+        .select({ applicationLink: teamMembers.applicationLink })
+        .from(teamMembers)
+        .where(
+          and(
+            eq(teamMembers.organizationId, org.id),
+            eq(teamMembers.slug, loSlug),
+          ),
+        )
+        .limit(1);
+      applicationLink = m?.applicationLink ?? null;
+    }
+    const primaryApplicationUrl =
+      resolveApplicationRedirectUrl(applicationLink);
+
     return {
       firstName: row.firstName,
       readiness: decision.readiness,
@@ -485,6 +577,7 @@ export async function getPublicResult(
       topRecommendation: pickTopRecommendation(decision),
       buyerExplanation: buyerify(decision.explanation),
       contact,
+      primaryApplicationUrl,
     };
   } catch (err) {
     if (!isDbUnavailableError(err)) {

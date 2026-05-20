@@ -1,30 +1,65 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+
+function errorMessageForParam(code: string | null): string | null {
+  if (code === "auth_callback") {
+    return "Sign-in link expired or is invalid. Try again from your email or use Forgot password.";
+  }
+  if (code === "invalid_reset_link") {
+    return "That password reset link is invalid or has expired. Request a new one.";
+  }
+  if (code === "not_provisioned") {
+    return "Your account isn't provisioned yet. Contact your admin.";
+  }
+  if (code === "realtor_inactive") {
+    return "This partner profile is inactive or was removed by your organization. If your access should be active, ask your admin to restore it. If you still have access and only forgot your password, use Forgot password below.";
+  }
+  return null;
+}
+
+function messageForParam(message: string | null): string | null {
+  if (message === "password_reset") {
+    return "Password updated. You can sign in with your new password.";
+  }
+  return null;
+}
 
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialError = searchParams.get("error");
+  const initialMessage = searchParams.get("message");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(
-    initialError === "not_provisioned"
-      ? "Your account isn't provisioned yet. Contact your admin."
-      : initialError === "invalid_reset_link"
-        ? "That password reset link is invalid or has expired. Request a new one."
-        : null,
+    errorMessageForParam(initialError),
   );
+  const [info, setInfo] = useState<string | null>(
+    messageForParam(initialMessage),
+  );
+
+  useEffect(() => {
+    if (searchParams.get("error") === "realtor_inactive") {
+      const supabase = createClient();
+      void supabase.auth.signOut();
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    setInfo(messageForParam(searchParams.get("message")));
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setInfo(null);
 
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({
@@ -54,7 +89,7 @@ export function LoginForm() {
               Homebuyer Clarity Engine
             </h1>
             <p className="text-xs text-surface-500 leading-tight">
-              Internal Team Dashboard
+              Team &amp; partner sign-in
             </p>
           </div>
         </div>
@@ -64,7 +99,8 @@ export function LoginForm() {
             Sign in
           </h2>
           <p className="text-xs text-surface-500 mb-5">
-            Accounts are created by an admin.
+            Admins send invites for new accounts. Use Forgot password if you
+            need to reset your password.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -116,6 +152,11 @@ export function LoginForm() {
                 {error}
               </div>
             )}
+            {info && (
+              <div className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-100 rounded px-3 py-2">
+                {info}
+              </div>
+            )}
 
             <button
               type="submit"
@@ -127,6 +168,9 @@ export function LoginForm() {
           </form>
         </div>
 
+        <p className="text-xs text-center text-surface-500 mt-4">
+          Need an account? Your organization&apos;s admin can send an invite.
+        </p>
       </div>
     </div>
   );

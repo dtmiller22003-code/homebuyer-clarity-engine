@@ -12,11 +12,13 @@
 // PHASE 2B ADDITIONS:
 // - organizations: branding colors, logo URL, font preset, default assignee, contact
 // - team_members: slug (public routing), phone, bio, calendly_url (reserved)
-// - leads: referrer_lo_slug (attribution from /apply/[slug])
+// - leads: referrer_lo_slug, source_type / source_slug / source_team_member_id
 // - NEW: realtor_partners (schema only, no UI yet)
 // - NEW: rate_limits (IP-based intake throttling)
+// - NEW: lead_documents (lead file metadata + Supabase Storage pointer)
 // =============================================================================
 
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   pgEnum,
@@ -27,6 +29,7 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  boolean,
 } from "drizzle-orm/pg-core";
 import type { LeadDecision } from "@/lib/types";
 
@@ -81,14 +84,6 @@ export const leadSourceEnum = pgEnum("lead_source", [
   "OTHER",
 ]);
 
-export const leadStatusEnum = pgEnum("lead_status", [
-  "new",
-  "reviewed",
-  "approved",
-  "archived",
-  "sent_to_crm",
-]);
-
 // Phase 2B
 export const fontPresetEnum = pgEnum("font_preset", [
   "SYSTEM",
@@ -126,8 +121,47 @@ export const organizations = pgTable("organizations", {
 });
 
 // -----------------------------------------------------------------------------
+// realtor_partners — referral partners; must appear before team_members / leads
+// (those tables reference this one).
+// -----------------------------------------------------------------------------
+export const realtorPartners = pgTable(
+  "realtor_partners",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    displayName: text("display_name").notNull(),
+    email: text("email").notNull(),
+    phone: text("phone"),
+    slug: text("slug").notNull(),
+    brokerage: text("brokerage"),
+    /** Realtor-only branding (URL text; no upload in product). */
+    personalLogoUrl: text("personal_logo_url"),
+    subtitle: text("subtitle"),
+    /** Optional override for /apply/realtor/[slug] redirect; else company default. */
+    defaultApplicationLink: text("default_application_link"),
+    /** When false, partner cannot sign in or receive public apply traffic. */
+    isActive: boolean("is_active").notNull().default(true),
+    /** Soft delete — row retained for reporting; null = not removed. */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    orgIdx: index("realtor_partners_org_idx").on(table.organizationId),
+    /** Uniqueness only among partners not soft-deleted (frees slug after removal). */
+    orgSlugAliveIdx: uniqueIndex("realtor_partners_org_slug_alive_idx").on(
+      table.organizationId,
+      table.slug,
+    ).where(sql`${table.deletedAt} is null`),
+  }),
+);
+
+// -----------------------------------------------------------------------------
 // team_members
-// PHASE 2B: public profile fields (slug drives /apply/[slug] routing)
+// PHASE 2B: public profile fields (slug drives /apply/lo/[slug] routing)
 // -----------------------------------------------------------------------------
 export const teamMembers = pgTable(
   "team_members",
@@ -146,6 +180,13 @@ export const teamMembers = pgTable(
     phone: text("phone"),
     bio: text("bio"),
     calendlyUrl: text("calendly_url"), // reserved for Phase 3
+    /** External full-app URL for Book Now / /apply/lo/[slug] redirect. */
+    applicationLink: text("application_link"),
+    /** When role is `realtor_partner`, scopes RLS and dashboard to this partner's leads. */
+    realtorPartnerId: uuid("realtor_partner_id").references(
+      () => realtorPartners.id,
+      { onDelete: "set null" },
+    ),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -153,10 +194,44 @@ export const teamMembers = pgTable(
   },
   (table) => ({
     orgIdx: index("team_members_org_idx").on(table.organizationId),
+    realtorPartnerIdx: index("team_members_realtor_partner_idx").on(
+      table.realtorPartnerId,
+    ),
     // One slug per org — prevents /apply/diana from routing two places
     orgSlugIdx: uniqueIndex("team_members_org_slug_idx").on(
       table.organizationId,
       table.slug,
+    ),
+  }),
+);
+
+// -----------------------------------------------------------------------------
+// partner_apply_redirect_events — anonymous visits to public partner apply URLs
+// (recorded before redirect to external application).
+// -----------------------------------------------------------------------------
+export const partnerApplyRedirectEvents = pgTable(
+  "partner_apply_redirect_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    realtorPartnerId: uuid("realtor_partner_id").references(
+      () => realtorPartners.id,
+      { onDelete: "set null" },
+    ),
+    teamMemberId: uuid("team_member_id").references(() => teamMembers.id, {
+      onDelete: "set null",
+    }),
+    sourceSlug: text("source_slug").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    orgIdx: index("partner_apply_redirect_events_org_idx").on(
+      table.organizationId,
     ),
   }),
 );
@@ -186,6 +261,23 @@ export const leads = pgTable(
 
     // Phase 2B — attribution
     referrerLoSlug: text("referrer_lo_slug"),
+    /** Set when intake uses a realtor partner link (`/apply/realtor/[slug]` or `?partner=`). */
+    realtorPartnerId: uuid("realtor_partner_id").references(
+      () => realtorPartners.id,
+      { onDelete: "set null" },
+    ),
+    /** Intake attribution: company | realtor | loan_officer */
+    sourceType: text("source_type").notNull().default("company"),
+    sourceSlug: text("source_slug"),
+    /**
+     * Snapshot of partner or LO display name at intake (or backfilled on partner deactivate).
+     * Preserves reporting if `realtor_partner_id` is later cleared.
+     */
+    sourceDisplayName: text("source_display_name"),
+    sourceTeamMemberId: uuid("source_team_member_id").references(
+      () => teamMembers.id,
+      { onDelete: "set null" },
+    ),
 
     // Pillar inputs
     creditRange: creditRangeEnum("credit_range").notNull(),
@@ -204,7 +296,8 @@ export const leads = pgTable(
     targetPurchasePrice: integer("target_purchase_price"),
 
     notes: text("notes"),
-    status: leadStatusEnum("status").notNull().default("new"),
+    /** Sales pipeline: new → contacted → … → closed / dead (text, not enum). */
+    status: text("status").notNull().default("new"),
 
     // Cached computed decision
     decision: jsonb("decision").$type<LeadDecision>().notNull(),
@@ -220,6 +313,43 @@ export const leads = pgTable(
     orgIdx: index("leads_org_idx").on(table.organizationId),
     statusIdx: index("leads_status_idx").on(table.status),
     assignedIdx: index("leads_assigned_idx").on(table.assignedTo),
+    realtorPartnerIdx: index("leads_realtor_partner_idx").on(
+      table.realtorPartnerId,
+    ),
+  }),
+);
+
+// -----------------------------------------------------------------------------
+// lead_documents — files attached to a lead (metadata + Supabase Storage path)
+// Upload flow is separate; this table stores the pointer for admin file management.
+// -----------------------------------------------------------------------------
+export const leadDocuments = pgTable(
+  "lead_documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    /** Supabase Storage bucket id (e.g. lead-documents). Null = not stored in our bucket. */
+    storageBucket: text("storage_bucket"),
+    /**
+     * Object key within the bucket (e.g. {orgId}/{leadId}/file.pdf).
+     * When null/empty, delete only removes the DB row (no storage object).
+     */
+    storagePath: text("storage_path"),
+    originalFilename: text("original_filename").notNull(),
+    contentType: text("content_type"),
+    uploadedByUserId: uuid("uploaded_by_user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    orgIdx: index("lead_documents_org_idx").on(table.organizationId),
+    leadIdx: index("lead_documents_lead_idx").on(table.leadId),
   }),
 );
 
@@ -243,38 +373,6 @@ export const leadEvents = pgTable(
   },
   (table) => ({
     leadIdx: index("lead_events_lead_idx").on(table.leadId),
-  }),
-);
-
-// -----------------------------------------------------------------------------
-// realtor_partners (PHASE 2B — schema only; UI deferred to Phase 3)
-// Note: actorUserId is NOT required on lead_events when written from the
-// public intake flow — we use a sentinel UUID. See app/actions/intake.ts.
-// -----------------------------------------------------------------------------
-export const realtorPartners = pgTable(
-  "realtor_partners",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    organizationId: uuid("organization_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
-    displayName: text("display_name").notNull(),
-    email: text("email").notNull(),
-    phone: text("phone"),
-    slug: text("slug").notNull(),
-    brokerage: text("brokerage"),
-    // Stored as text for consistency with hasFiledTaxes/heavyWriteOffs pattern
-    active: text("active").notNull().default("true"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => ({
-    orgIdx: index("realtor_partners_org_idx").on(table.organizationId),
-    orgSlugIdx: uniqueIndex("realtor_partners_org_slug_idx").on(
-      table.organizationId,
-      table.slug,
-    ),
   }),
 );
 
@@ -309,5 +407,6 @@ export type LeadRow = typeof leads.$inferSelect;
 export type NewLeadRow = typeof leads.$inferInsert;
 export type TeamMemberRow = typeof teamMembers.$inferSelect;
 export type LeadEventRow = typeof leadEvents.$inferSelect;
+export type LeadDocumentRow = typeof leadDocuments.$inferSelect;
 export type OrganizationRow = typeof organizations.$inferSelect;
 export type RealtorPartnerRow = typeof realtorPartners.$inferSelect;

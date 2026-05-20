@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { isAdminRole } from "@/lib/auth-roles";
 
 interface TopBarProps {
   user: { displayName: string; email: string; role: string };
@@ -19,6 +20,8 @@ export function TopBar({ user }: TopBarProps) {
     .slice(0, 2)
     .join("")
     .toUpperCase();
+
+  const homeHref = user.role === "realtor_partner" ? "/realtor" : "/";
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -45,15 +48,39 @@ export function TopBar({ user }: TopBarProps) {
       </div>
 
       <div className="flex items-center gap-4 text-xs">
-        {user.role === "admin" && (
+        <Link href={homeHref} className="text-surface-300 hover:text-white">
+          Home
+        </Link>
+        {user.role === "realtor_partner" && (
           <Link
-            href="/settings/branding"
+            href="/realtor/branding"
             className="text-surface-300 hover:text-white"
           >
-            Settings
+            Branding
           </Link>
         )}
-        <button className="text-surface-300 hover:text-white">Help</button>
+        {isAdminRole(user.role) && (
+          <>
+            <Link
+              href="/settings/branding"
+              className="text-surface-300 hover:text-white"
+            >
+              Settings
+            </Link>
+            <Link
+              href="/settings/realtors"
+              className="text-surface-300 hover:text-white"
+            >
+              Realtors
+            </Link>
+            <Link
+              href="/settings/team"
+              className="text-surface-300 hover:text-white"
+            >
+              Team
+            </Link>
+          </>
+        )}
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 bg-brand rounded-full flex items-center justify-center text-xs font-semibold">
             {initials || "?"}

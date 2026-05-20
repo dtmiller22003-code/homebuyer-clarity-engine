@@ -13,6 +13,7 @@ const PUBLIC_ROUTES = [
   "/apply",
   "/forgot-password",
   "/auth/reset-password",
+  "/reset-password",
 ];
 
 export async function middleware(request: NextRequest) {
@@ -53,11 +54,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from login
+  // Redirect authenticated users away from login — except when the app sent
+  // them here with an error (e.g. inactive realtor) so they can read the message,
+  // sign out client-side, and use forgot-password like everyone else.
   if (user && pathname === "/login") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    return NextResponse.redirect(url);
+    const err = request.nextUrl.searchParams.get("error");
+    const stayOnLogin =
+      err === "realtor_inactive" ||
+      err === "not_provisioned" ||
+      err === "auth_callback" ||
+      err === "invalid_reset_link";
+    if (!stayOnLogin) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
   }
 
   return response;

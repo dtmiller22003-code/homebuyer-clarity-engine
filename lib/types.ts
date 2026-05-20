@@ -22,6 +22,7 @@ export type EmploymentType =
 
 export type OccupancyIntent = "PRIMARY_HOME" | "INVESTMENT_PROPERTY";
 
+/** Canonical buckets used by `decision-engine` after `normalizeCreditRange()`. */
 export type CreditRange =
   | "BELOW_580"
   | "580_619"
@@ -53,12 +54,21 @@ export type LeadSource =
   | "OPEN_HOUSE"
   | "OTHER";
 
-export type LeadStatus =
+/** Sales / ops pipeline stage stored on `leads.status` (text in DB). */
+export type LeadPipelineStatus =
   | "new"
-  | "reviewed"
-  | "approved"
-  | "archived"
-  | "sent_to_crm";
+  | "contacted"
+  | "prequalified"
+  | "preapproved"
+  | "under_contract"
+  | "closed"
+  | "dead";
+
+/** @deprecated Use LeadPipelineStatus — alias kept for gradual refactors */
+export type LeadStatus = LeadPipelineStatus;
+
+/** How the lead was attributed at intake (public links vs company default). */
+export type LeadAttributionSource = "company" | "realtor" | "loan_officer";
 
 // =============================================================================
 // Lead — the raw inputs captured from a borrower.
@@ -92,7 +102,23 @@ export interface LeadInputs {
   // --- end buyer-provided fields ---
 
   notes?: string;
-  status: LeadStatus;
+  status: LeadPipelineStatus;
+
+  /** Present when the lead came in via a realtor partner link. */
+  realtorPartnerId?: string | null;
+
+  sourceType?: LeadAttributionSource;
+  sourceSlug?: string | null;
+  /** Snapshot name for reporting when partner / LO row is missing. */
+  sourceDisplayName?: string | null;
+  /** Loan officer team member when source is loan_officer. */
+  sourceTeamMemberId?: string | null;
+
+  /**
+   * Staff dashboards only — set when listing leads from the server.
+   * e.g. "Source: Realtor – Desmond Miller"
+   */
+  intakeSourceLine?: string;
 }
 
 // =============================================================================
@@ -194,4 +220,13 @@ export const EMPLOYMENT_LABELS: Record<EmploymentType, string> = {
 export const OCCUPANCY_INTENT_LABELS: Record<OccupancyIntent, string> = {
   PRIMARY_HOME: "Primary Home",
   INVESTMENT_PROPERTY: "Investment Property",
+};
+
+export const LEAD_ATTRIBUTION_SOURCE_LABELS: Record<
+  LeadAttributionSource,
+  string
+> = {
+  company: "Company default",
+  realtor: "Realtor partner link",
+  loan_officer: "Loan officer link",
 };

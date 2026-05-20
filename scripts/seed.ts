@@ -133,7 +133,6 @@ async function main() {
       phone: null,
       slug: "example",
       brokerage: "Example Realty",
-      active: "true",
     });
     console.log("→ Seeded example realtor_partner row");
   }

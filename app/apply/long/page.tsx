@@ -7,12 +7,13 @@ import { LongIntakeForm } from "@/components/intake/LongIntakeForm";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = { lo?: string | string[] };
+type SearchParams = { lo?: string | string[]; partner?: string | string[] };
 
-function firstLo(searchParams: SearchParams): string | undefined {
-  const raw = searchParams.lo;
-  if (Array.isArray(raw)) return raw[0]?.trim() || undefined;
-  return raw?.trim() || undefined;
+function firstParam(
+  value: string | string[] | undefined,
+): string | undefined {
+  if (Array.isArray(value)) return value[0]?.trim() || undefined;
+  return value?.trim() || undefined;
 }
 
 export default async function LongApplyPage({
@@ -22,13 +23,15 @@ export default async function LongApplyPage({
 }) {
   const brand = await getApplyBranding();
 
-  const referrerLoSlug = firstLo(searchParams);
+  const referrerLoSlug = firstParam(searchParams.lo);
+  const realtorPartnerSlug = firstParam(searchParams.partner);
 
   return (
     <div className="py-6 sm:py-8">
       <LongIntakeForm
         organizationId={brand.organizationId}
         referrerLoSlug={referrerLoSlug}
+        realtorPartnerSlug={realtorPartnerSlug}
         brandColors={{
           primary: brand.primaryColor,
           secondary: brand.secondaryColor,

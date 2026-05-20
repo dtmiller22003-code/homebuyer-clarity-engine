@@ -25,7 +25,7 @@ const rawLeads: LeadInputs[] = [
     hasFiledTaxes: true,
     heavyWriteOffs: false,
     targetPurchasePrice: 675000,
-    status: "approved",
+    status: "preapproved",
     notes: "Ideal client. Owed taxes — strong reported income. Ready to go.",
   },
 
@@ -71,7 +71,7 @@ const rawLeads: LeadInputs[] = [
     employmentType: "W2",
     occupancyIntent: "PRIMARY_HOME",
     targetPurchasePrice: 215000,
-    status: "reviewed",
+    status: "contacted",
     notes:
       "First-time buyer. Credit meets FHA. Cash is tight — explore DPA + seller concessions.",
   },
@@ -191,7 +191,7 @@ const rawLeads: LeadInputs[] = [
     employmentType: "W2",
     occupancyIntent: "PRIMARY_HOME",
     targetPurchasePrice: 200000,
-    status: "reviewed",
+    status: "contacted",
     notes: "Needs credit repair + debt paydown before application makes sense.",
   },
 ];

@@ -13,7 +13,8 @@ interface TeamMemberVM {
   phone: string | null;
   slug: string | null;
   bio: string | null;
-  role: "admin" | "agent";
+  role: "admin" | "agent" | "loan_officer";
+  applicationLink: string | null;
 }
 
 export function TeamSettingsClient({
@@ -45,6 +46,9 @@ export function TeamSettingsClient({
         slug: member.slug ?? null,
         bio: member.bio ?? null,
         role: member.role,
+        applicationLink: member.applicationLink?.trim()
+          ? member.applicationLink.trim()
+          : null,
       });
       if (!res.ok) {
         setError(res.error);
@@ -100,10 +104,13 @@ export function TeamSettingsClient({
       <section className="rounded-lg border border-surface-200 bg-white p-5 overflow-x-auto">
         <h2 className="text-lg font-semibold text-surface-900">Team members</h2>
         <p className="text-sm text-surface-600 mt-1">
-          Edit display name, phone, slug, bio, and role.
+          Edit display name, phone, slug, bio, role, and loan officer application
+          URL. Public lead links use{" "}
+          <code className="text-xs bg-surface-100 px-1 rounded">/apply/lo/…</code>
+          .
         </p>
 
-        <table className="mt-4 w-full min-w-[900px] text-sm">
+        <table className="mt-4 w-full min-w-[1100px] text-sm">
           <thead>
             <tr className="text-left text-surface-600 border-b border-surface-200">
               <th className="py-2 pr-2">Name</th>
@@ -111,7 +118,8 @@ export function TeamSettingsClient({
               <th className="py-2 pr-2">Phone</th>
               <th className="py-2 pr-2">Role</th>
               <th className="py-2 pr-2">Slug</th>
-              <th className="py-2 pr-2">Public link</th>
+              <th className="py-2 pr-2">Public lead link</th>
+              <th className="py-2 pr-2">Application link</th>
               <th className="py-2 pr-2">Bio</th>
               <th className="py-2 pr-2" />
             </tr>
@@ -149,14 +157,15 @@ export function TeamSettingsClient({
                       const next = [...rows];
                       next[idx] = {
                         ...member,
-                        role: e.target.value as "admin" | "agent",
+                        role: e.target.value as TeamMemberVM["role"],
                       };
                       setRows(next);
                     }}
                     className="rounded border border-surface-300 px-2 py-1.5"
                   >
                     <option value="admin">admin</option>
-                    <option value="agent">agent</option>
+                    <option value="loan_officer">loan officer</option>
+                    <option value="agent">agent (legacy)</option>
                   </select>
                 </td>
                 <td className="py-2 pr-2">
@@ -180,15 +189,15 @@ export function TeamSettingsClient({
                   {member.slug ? (
                     <div className="space-y-1">
                       <div className="text-xs text-surface-600 break-all">
-                        {`${baseUrl}/apply/${member.slug}`}
+                        {`${baseUrl}/apply/lo/${member.slug}`}
                       </div>
                       <button
                         type="button"
                         onClick={async () => {
                           await navigator.clipboard.writeText(
-                            `${baseUrl}/apply/${member.slug}`,
+                            `${baseUrl}/apply/lo/${member.slug}`,
                           );
-                          setMessage(`Copied link for ${member.displayName}.`);
+                          setMessage(`Copied public lead link for ${member.displayName}.`);
                         }}
                         className="text-xs text-brand hover:underline"
                       >
@@ -197,6 +206,25 @@ export function TeamSettingsClient({
                     </div>
                   ) : (
                     <span className="text-xs text-surface-400">No slug</span>
+                  )}
+                </td>
+                <td className="py-2 pr-2">
+                  {member.role === "loan_officer" || member.role === "agent" ? (
+                    <input
+                      value={member.applicationLink ?? ""}
+                      onChange={(e) => {
+                        const next = [...rows];
+                        next[idx] = {
+                          ...member,
+                          applicationLink: e.target.value || null,
+                        };
+                        setRows(next);
+                      }}
+                      placeholder="https://…"
+                      className="w-56 rounded border border-surface-300 px-2 py-1.5 text-xs"
+                    />
+                  ) : (
+                    <span className="text-xs text-surface-400">—</span>
                   )}
                 </td>
                 <td className="py-2 pr-2">
