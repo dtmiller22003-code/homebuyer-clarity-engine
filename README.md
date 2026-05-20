@@ -8,6 +8,7 @@ Copy `.env.example` to `.env.local` (if present) or create `.env.local` with:
 
 - `DATABASE_URL` — Supabase **Session pooler** URI (port 5432)
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Settings → API
+- `NEXT_PUBLIC_SITE_URL` — app origin for password-reset emails (e.g. `https://homebuyer-clarity-engine.vercel.app`; use `http://localhost:3000` locally)
 - `SUPABASE_SERVICE_ROLE_KEY` — optional for future elevated Supabase APIs (not required for Phase 2B intake via Drizzle)
 
 ## Fresh database

@@ -54,8 +54,7 @@ export function DashboardClient({
   const visibleLeads = useMemo(() => {
     const filtered = leads.filter((lead) => {
       if (lead.status === "archived" && filters.readiness === "ALL") {
-        // Hide archived leads by default unless explicitly filtering
-        // Phase 3: add an explicit "show archived" toggle
+        // Archived leads still show in the list until a "show archived" control exists
       }
       if (
         filters.readiness !== "ALL" &&
@@ -121,17 +120,10 @@ export function DashboardClient({
         return "archived";
       case "send_to_crm":
         return "sent_to_crm";
-      case "edit":
-        return null; // handled separately (opens modal in Phase 2B)
     }
   };
 
   const handleAction = (action: PanelAction, lead: Lead) => {
-    if (action === "edit") {
-      flashToast("Inline edit ships with buyer intake form in Phase 2B.");
-      return;
-    }
-
     const newStatus = actionToStatus(action);
     if (!newStatus) return;
 
@@ -162,7 +154,7 @@ export function DashboardClient({
       // Action-specific toasts
       if (action === "send_to_crm") {
         flashToast(
-          `${lead.firstName} ${lead.lastName} marked for CRM sync. Live integration in Phase 5.`,
+          `${lead.firstName} ${lead.lastName} marked for handoff (internal status only, not a CRM send).`,
         );
       } else if (action === "approve") {
         flashToast(`${lead.firstName} ${lead.lastName} approved.`);

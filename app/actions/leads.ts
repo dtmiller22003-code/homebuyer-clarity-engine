@@ -1,6 +1,5 @@
 // =============================================================================
 // Server actions for lead operations.
-// These are the replacement for Phase 1's local setState handlers.
 // =============================================================================
 
 "use server";
@@ -46,6 +45,23 @@ export async function updateLeadStatus(input: {
   const auth = await getAuthContext();
   const parsed = statusUpdateSchema.parse(input);
 
+  const [existing] = await db
+    .select({ id: leads.id, status: leads.status })
+    .from(leads)
+    .where(
+      and(
+        eq(leads.id, parsed.leadId),
+        eq(leads.organizationId, auth.organizationId),
+      ),
+    )
+    .limit(1);
+
+  if (!existing) {
+    return { ok: false as const, error: "Lead not found or access denied" };
+  }
+
+  const previousStatus = existing.status;
+
   // Update only if the lead belongs to the same org
   const [updated] = await db
     .update(leads)
@@ -71,7 +87,7 @@ export async function updateLeadStatus(input: {
     actorUserId: auth.userId,
     actorName: auth.displayName,
     eventType: `status_${parsed.status}`,
-    metadata: { previousStatus: updated.status },
+    metadata: { previousStatus },
   });
 
   revalidatePath("/");

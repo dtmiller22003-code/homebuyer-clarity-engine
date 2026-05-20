@@ -151,7 +151,6 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* Settings footer stub */}
       <div className="px-5 py-3 border-t border-surface-200">
         <button className="w-full flex items-center gap-2 text-xs text-surface-600 hover:text-surface-900">
           <svg

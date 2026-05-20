@@ -17,7 +17,7 @@ interface DetailPanelProps {
   disabled?: boolean;
 }
 
-export type PanelAction = "approve" | "edit" | "send_to_crm" | "archive";
+export type PanelAction = "approve" | "send_to_crm" | "archive";
 
 const readinessVariant = {
   READY_NOW: "strong" as const,
@@ -205,23 +205,20 @@ export function DetailPanel({ lead, onAction, disabled }: DetailPanelProps) {
             disabled={disabled}
           />
           <ActionButton
-            label="Send to CRM"
+            label="Mark for handoff"
             variant="primary-outline"
+            title="Internal status only. Does not send data to an external system."
             onClick={() => onAction("send_to_crm", lead)}
             disabled={disabled}
           />
-          <ActionButton
-            label="Edit"
-            variant="secondary"
-            onClick={() => onAction("edit", lead)}
-            disabled={disabled}
-          />
-          <ActionButton
-            label="Archive"
-            variant="danger-outline"
-            onClick={() => onAction("archive", lead)}
-            disabled={disabled}
-          />
+          <div className="col-span-2">
+            <ActionButton
+              label="Archive"
+              variant="danger-outline"
+              onClick={() => onAction("archive", lead)}
+              disabled={disabled}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -328,11 +325,13 @@ function ActionButton({
   variant,
   onClick,
   disabled,
+  title,
 }: {
   label: string;
   variant: "primary" | "primary-outline" | "secondary" | "danger-outline";
   onClick: () => void;
   disabled?: boolean;
+  title?: string;
 }) {
   const classes: Record<typeof variant, string> = {
     primary: "bg-brand hover:bg-brand-hover text-white",
@@ -345,8 +344,10 @@ function ActionButton({
   };
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={`w-full py-2 px-3 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${classes[variant]}`}
     >
       {label}

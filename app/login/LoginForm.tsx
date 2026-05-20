@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -15,7 +16,9 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(
     initialError === "not_provisioned"
       ? "Your account isn't provisioned yet. Contact your admin."
-      : null,
+      : initialError === "invalid_reset_link"
+        ? "That password reset link is invalid or has expired. Request a new one."
+        : null,
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -98,6 +101,14 @@ export function LoginForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-surface-300 rounded focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
               />
+              <p className="mt-1.5 text-right">
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-brand hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </p>
             </div>
 
             {error && (
@@ -116,9 +127,6 @@ export function LoginForm() {
           </form>
         </div>
 
-        <p className="text-xs text-center text-surface-500 mt-4">
-          Forgot your password? Contact your admin to reset.
-        </p>
       </div>
     </div>
   );

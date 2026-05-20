@@ -39,7 +39,7 @@ export function TopBar({ user }: TopBarProps) {
             Homebuyer Clarity Engine
           </h1>
           <p className="text-[10px] text-surface-400 leading-tight">
-            Internal Dashboard · Phase 2B
+            Internal lead dashboard
           </p>
         </div>
       </div>
